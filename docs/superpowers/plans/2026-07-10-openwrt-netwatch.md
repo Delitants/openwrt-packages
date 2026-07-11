@@ -186,10 +186,10 @@ Run:
 chmod +x scripts/fetch-sdk.sh scripts/in-sdk.sh netwatch/files/etc/init.d/netwatch
 ./tests/static.sh
 ./scripts/fetch-sdk.sh
-./scripts/in-sdk.sh /sdk/staging_dir/host/bin/ucode -e 'print("ucode-ok\n")'
+./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk --version
 ```
 
-Expected: static check exits 0, SDK checksum reports `OK`, and the final command prints `ucode-ok`.
+Expected: static check exits 0, SDK checksum reports `OK`, and the final command prints the APK Tools version.
 
 - [ ] **Step 5: Commit**
 
