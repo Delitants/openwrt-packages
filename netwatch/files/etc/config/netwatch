@@ -1,0 +1,7 @@
+config netwatch 'main'
+	option startup_grace '60'
+	option mail_retry_backoff '300'
+
+config smtp 'smtp'
+	option port '587'
+	option tls 'starttls'

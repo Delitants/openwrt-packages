@@ -1,0 +1,16 @@
+#!/bin/sh /etc/rc.common
+
+USE_PROCD=1
+START=95
+
+start_service() {
+	procd_open_instance
+	procd_set_param command /usr/bin/ucode -L '/usr/share/netwatch/*.uc' /usr/share/netwatch/netwatchd.uc
+	procd_set_param respawn
+	procd_set_param file /etc/config/netwatch
+	procd_close_instance
+}
+
+reload_service() {
+	procd_send_signal netwatch '*' HUP
+}
