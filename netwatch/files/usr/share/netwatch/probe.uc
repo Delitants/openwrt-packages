@@ -1,7 +1,7 @@
-const fs = require('fs');
-const socket = require('socket');
-const uloop = require('uloop');
 import { parse_ping } from 'ping';
+
+const PING_INTERVAL_MS = 1000;
+const PING_GRACE_MS = 1000;
 
 function probe_result(ok, reason, detail) {
 	return {
@@ -25,7 +25,17 @@ function fixed_integer(value, minimum, maximum, fallback) {
 		: fallback;
 };
 
-function ping_command(monitor) {
+export function ping_timeout_ms(monitor) {
+	let count = fixed_integer(monitor.packet_count, 1, 20, 3);
+	let timeout = fixed_integer(monitor.timeout, 1, 60, 5);
+
+	// BusyBox sends the first packet immediately, waits one second between
+	// packets, then allows -W seconds for the final reply. Leave one second for
+	// fork, scheduling, output parsing, and delivery to the parent callback.
+	return (count - 1) * PING_INTERVAL_MS + timeout * 1000 + PING_GRACE_MS;
+};
+
+export function ping_command(monitor) {
 	let binary = match(monitor.target, /:/) ? '/bin/ping6' : '/bin/ping';
 	let count = fixed_integer(monitor.packet_count, 1, 20, 3);
 	let timeout = fixed_integer(monitor.timeout, 1, 60, 5);
@@ -36,8 +46,8 @@ function ping_command(monitor) {
 		binary, count, timeout, monitor.target);
 };
 
-function run_ping(monitor) {
-	let proc = fs.popen(ping_command(monitor), 'r');
+export function run_ping_with(monitor, fs_module) {
+	let proc = fs_module.popen(ping_command(monitor), 'r');
 
 	if (!proc)
 		return probe_result(false, 'probe_start', 'unable to start ping');
@@ -50,7 +60,7 @@ function run_ping(monitor) {
 	return parse_ping(output, exit_code ?? 1, monitor);
 };
 
-function tcp_reason(error_code) {
+export function tcp_reason(error_code) {
 	if (type(error_code) == 'int' && error_code < 0)
 		return 'dns';
 
@@ -64,20 +74,20 @@ function tcp_reason(error_code) {
 	return 'connect_failed';
 };
 
-function run_tcp(monitor, timeout_ms) {
-	let connection = socket.connect(monitor.target, monitor.port,
-		{ socktype: socket.SOCK_STREAM }, timeout_ms);
+export function run_tcp_with(monitor, timeout_ms, socket_module) {
+	let connection = socket_module.connect(monitor.target, monitor.port,
+		{ socktype: socket_module.SOCK_STREAM }, timeout_ms);
 
 	if (connection) {
 		connection.close();
 		return probe_result(true, null, 'TCP connection succeeded');
 	}
 
-	let reason = tcp_reason(socket.error(true));
+	let reason = tcp_reason(socket_module.error(true));
 	return probe_result(false, reason, `TCP ${reason}`);
 };
 
-export function start_probe(monitor, callback) {
+function valid_probe(monitor, callback) {
 	if (type(monitor) != 'object' || type(callback) != 'function' ||
 		!safe_target(monitor.target) || !(monitor.type in ['ping', 'tcp']))
 		return false;
@@ -86,7 +96,20 @@ export function start_probe(monitor, callback) {
 		(type(monitor.port) != 'int' || monitor.port < 1 || monitor.port > 65535))
 		return false;
 
+	return true;
+};
+
+export function start_probe_with(monitor, callback, dependencies) {
+	if (!valid_probe(monitor, callback) || type(dependencies) != 'object' ||
+		type(dependencies.fs) != 'object' ||
+		type(dependencies.socket) != 'object' ||
+		type(dependencies.uloop) != 'object')
+		return false;
+
 	let timeout_ms = fixed_integer(monitor.timeout, 1, 60, 5) * 1000;
+	let parent_timeout_ms = monitor.type == 'ping'
+		? ping_timeout_ms(monitor)
+		: timeout_ms;
 	let task_handle = null;
 	let timeout_handle = null;
 	let completed = false;
@@ -103,22 +126,20 @@ export function start_probe(monitor, callback) {
 		callback(result);
 	};
 
-	task_handle = uloop.task(
-		(pipe) => {
-			let result;
-
+	task_handle = dependencies.uloop.task(
+		() => {
+			// uloop.task() serializes this return value to the output callback.
+			// Calling pipe.send() as well would emit a second message.
 			try {
-				result = monitor.type == 'ping'
-					? run_ping(monitor)
-					: run_tcp(monitor, timeout_ms);
+				return monitor.type == 'ping'
+					? run_ping_with(monitor, dependencies.fs)
+					: run_tcp_with(monitor, timeout_ms, dependencies.socket);
 			}
 			catch (error) {
-				result = probe_result(false,
+				return probe_result(false,
 					monitor.type == 'tcp' ? 'connect_failed' : 'probe_failed',
 					'probe failed');
 			}
-
-			pipe.send(result);
 		},
 		(result) => finish(result)
 	);
@@ -126,7 +147,7 @@ export function start_probe(monitor, callback) {
 	if (!task_handle)
 		return false;
 
-	timeout_handle = uloop.timer(timeout_ms, () => {
+	timeout_handle = dependencies.uloop.timer(parent_timeout_ms, () => {
 		// The timer is firing now; avoid cancelling its handle from finish().
 		timeout_handle = null;
 
@@ -143,4 +164,15 @@ export function start_probe(monitor, callback) {
 	}
 
 	return true;
+};
+
+export function start_probe(monitor, callback) {
+	if (!valid_probe(monitor, callback))
+		return false;
+
+	return start_probe_with(monitor, callback, {
+		fs: require('fs'),
+		socket: require('socket'),
+		uloop: require('uloop')
+	});
 };

@@ -29,8 +29,11 @@ export function parse_ping(output, exit_code, monitor) {
 	let transmitted = +summary[1];
 	let received = +summary[2];
 	let loss = +summary[4];
+	let lost = transmitted - received;
 
-	if (transmitted < 1 || received > transmitted || loss < 0 || loss > 100)
+	if (transmitted < 1 || received > transmitted || loss < 0 || loss > 100 ||
+		loss * transmitted > lost * 100 ||
+		(loss + 1) * transmitted <= lost * 100)
 		return result(false, 'invalid_output', null, null, 'invalid ping output');
 
 	let rtt = match(output,

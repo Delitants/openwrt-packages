@@ -45,6 +45,11 @@ equal(result.reason, 'invalid_output', 'malformed output reason');
 equal(result.loss, null, 'malformed output has no loss');
 equal(result.avg_rtt, null, 'malformed output has no RTT');
 
+result = parse_ping(`3 packets transmitted, 3 packets received, 100% packet loss
+round-trip min/avg/max = 1.000/2.000/3.000 ms`, 0, {});
+equal(result.ok, false, 'inconsistent packet summary unhealthy');
+equal(result.reason, 'invalid_output', 'inconsistent packet summary reason');
+
 result = parse_ping(loss_text, 1, {
 	loss_enabled: true, max_loss: 40, rtt_enabled: true, max_rtt: 50
 });
