@@ -253,7 +253,7 @@ Expected: FAIL because module `config` does not exist.
 
 - [ ] **Step 3: Implement normalization**
 
-Implement conservative targets with `/^(?!-)[A-Za-z0-9_.:%-]+$/`, reject CR/LF everywhere, and normalize numeric fields with these ranges:
+Implement conservative targets with `substr(value, 0, 1) != '-' && match(value, /^[A-Za-z0-9_.:%-]+$/)`, reject CR/LF everywhere, and normalize numeric fields with these ranges:
 
 ```javascript
 const LIMITS = {
