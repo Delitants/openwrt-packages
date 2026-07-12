@@ -1,0 +1,7 @@
+PING 2001:db8::1 (2001:db8::1): 56 data bytes
+64 bytes from 2001:db8::1: seq=0 ttl=64 time=22.000 ms
+64 bytes from 2001:db8::1: seq=2 ttl=64 time=66.000 ms
+
+--- 2001:db8::1 ping statistics ---
+3 packets transmitted, 2 received, 33% packet loss
+round-trip min/avg/max = 22.000/44.000/66.000 ms

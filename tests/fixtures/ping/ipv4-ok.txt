@@ -1,0 +1,8 @@
+PING 192.0.2.1 (192.0.2.1): 56 data bytes
+64 bytes from 192.0.2.1: seq=0 ttl=64 time=9.100 ms
+64 bytes from 192.0.2.1: seq=1 ttl=64 time=12.500 ms
+64 bytes from 192.0.2.1: seq=2 ttl=64 time=18.000 ms
+
+--- 192.0.2.1 ping statistics ---
+3 packets transmitted, 3 packets received, 0% packet loss
+round-trip min/avg/max = 9.100/12.500/18.000 ms
