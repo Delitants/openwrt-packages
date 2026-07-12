@@ -32,6 +32,17 @@ function uci_bool(value, fallback) {
 	return fallback;
 };
 
+function monitor_bool(raw, field, fallback, errors) {
+	let value = raw?.[field];
+
+	if (has_line_break(value)) {
+		push(errors, `${field} must not contain line breaks`);
+		return fallback;
+	}
+
+	return uci_bool(value, fallback);
+};
+
 function plain_string(value, fallback) {
 	return type(value) == 'string' && !has_line_break(value) ? value : fallback;
 };
@@ -144,7 +155,7 @@ export function normalize_monitor(id, raw) {
 
 	let value = {
 		id: monitor_id,
-		enabled: uci_bool(raw.enabled, true),
+		enabled: monitor_bool(raw, 'enabled', true, errors),
 		name: plain_monitor_string(raw, 'name', monitor_id, errors),
 		target,
 		type: monitor_type,
@@ -154,15 +165,15 @@ export function normalize_monitor(id, raw) {
 		initial_delay: normalized_integer(raw.initial_delay, 'initial delay', LIMITS.initial_delay, errors),
 		repeat_interval,
 		max_alerts: normalized_integer(raw.max_alerts, 'max alerts', LIMITS.max_alerts, errors),
-		recovery_email: uci_bool(raw.recovery_email, true),
+		recovery_email: monitor_bool(raw, 'recovery_email', true, errors),
 		recipients: plain_monitor_string(raw, 'recipients', '', errors)
 	};
 
 	if (monitor_type == 'ping') {
 		value.packet_count = normalized_integer(raw.packet_count, 'packet count', LIMITS.packet_count, errors);
-		value.loss_enabled = uci_bool(raw.loss_enabled, false);
+		value.loss_enabled = monitor_bool(raw, 'loss_enabled', false, errors);
 		value.max_loss = normalized_integer(raw.max_loss, 'max loss', LIMITS.max_loss, errors);
-		value.rtt_enabled = uci_bool(raw.rtt_enabled, false);
+		value.rtt_enabled = monitor_bool(raw, 'rtt_enabled', false, errors);
 		value.max_rtt = normalized_integer(raw.max_rtt, 'max RTT', LIMITS.max_rtt, errors);
 	}
 	else if (monitor_type == 'tcp') {
