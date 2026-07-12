@@ -13,9 +13,35 @@ function safe_text(value, field, allow_empty) {
 };
 
 function valid_address(value) {
-	return type(value) == 'string' &&
-		!!match(value, /^[^ <>@,]+@[^ <>@,]+$/) &&
-		!match(value, /[[:cntrl:]]/);
+	if (type(value) != 'string' || length(value) > 254 ||
+		match(value, /[[:cntrl:]]/))
+		return false;
+
+	let parts = split(value, '@');
+
+	if (length(parts) != 2)
+		return false;
+
+	let local = parts[0];
+	let domain = parts[1];
+
+	if (length(local) < 1 || length(local) > 64 ||
+		length(domain) < 1 || length(domain) > 253)
+		return false;
+
+	for (let atom in split(local, '.'))
+		if (atom == '' || !match(atom, /^[A-Za-z0-9!#$%&'*+_=^~-]+$/))
+			return false;
+
+	for (let label in split(domain, '.')) {
+		if (length(label) < 1 || length(label) > 63 ||
+			!match(label, /^[A-Za-z0-9-]+$/) ||
+			!match(substr(label, 0, 1), /^[A-Za-z0-9]$/) ||
+			!match(substr(label, length(label) - 1, 1), /^[A-Za-z0-9]$/))
+			return false;
+	}
+
+	return true;
 };
 
 function integer(value, field) {
@@ -56,8 +82,90 @@ function duration_text(seconds) {
 	return join(' ', parts);
 };
 
+function byte(value, offset) {
+	return ord(substr(value, offset, 1));
+};
+
+function utf8_width(value, offset, field) {
+	let first = byte(value, offset);
+	let width;
+
+	if (first < 128)
+		return 1;
+	else if (first >= 194 && first <= 223)
+		width = 2;
+	else if (first >= 224 && first <= 239)
+		width = 3;
+	else if (first >= 240 && first <= 244)
+		width = 4;
+	else
+		die(`${field} contains invalid UTF-8`);
+
+	if (offset + width > length(value))
+		die(`${field} contains invalid UTF-8`);
+
+	let second = byte(value, offset + 1);
+
+	if (second < 128 || second > 191 ||
+		(first == 224 && second < 160) ||
+		(first == 237 && second > 159) ||
+		(first == 240 && second < 144) ||
+		(first == 244 && second > 143))
+		die(`${field} contains invalid UTF-8`);
+
+	for (let index = 2; index < width; index++) {
+		let continuation = byte(value, offset + index);
+
+		if (continuation < 128 || continuation > 191)
+			die(`${field} contains invalid UTF-8`);
+	}
+
+	return width;
+};
+
+function has_non_ascii(value) {
+	for (let offset = 0; offset < length(value); offset++)
+		if (byte(value, offset) > 127)
+			return true;
+
+	return false;
+};
+
+function header_value(value, field) {
+	value = safe_text(value, field, false);
+
+	if (!has_non_ascii(value))
+		return value;
+
+	let words = [];
+	let chunk = '';
+	let chunk_length = 0;
+
+	for (let offset = 0; offset < length(value);) {
+		let width = utf8_width(value, offset, field);
+
+		if (chunk_length + width > 42) {
+			push(words, `=?UTF-8?B?${b64enc(chunk)}?=`);
+			chunk = '';
+			chunk_length = 0;
+		}
+
+		chunk += substr(value, offset, width);
+		chunk_length += width;
+		offset += width;
+	}
+
+	if (chunk != '')
+		push(words, `=?UTF-8?B?${b64enc(chunk)}?=`);
+
+	return join('\n ', words);
+};
+
 function display_name(value) {
 	value = safe_text(value, 'from name', true);
+
+	if (value != '' && has_non_ascii(value))
+		return header_value(value, 'from name');
 
 	return replace(replace(value, /\\/g, '\\\\'), /"/g, '\\"');
 };
@@ -161,7 +269,8 @@ export function render_message(kind, context) {
 	let monitor = context.monitor;
 	let state = context.state;
 	let from = safe_text(context.smtp.from, 'from address', false);
-	let from_name = display_name(context.smtp.from_name ?? '');
+	let raw_from_name = context.smtp.from_name ?? '';
+	let from_name = display_name(raw_from_name);
 	let recipients = message_recipients(context.recipients);
 	let name = safe_text(monitor.name, 'monitor name', false);
 	let target = safe_text(monitor.target, 'monitor target', false);
@@ -221,11 +330,15 @@ export function render_message(kind, context) {
 	}
 
 	let headers = [
-		from_name != '' ? `From: "${from_name}" <${from}>` : `From: ${from}`,
+		from_name != ''
+			? has_non_ascii(raw_from_name)
+				? `From: ${from_name} <${from}>`
+				: `From: "${from_name}" <${from}>`
+			: `From: ${from}`,
 		`To: ${join(', ', recipients)}`,
 		`Date: ${rfc5322_date(timestamp)}`,
 		`Message-ID: <netwatch.${timestamp}.${monitor_id}@${hostname}>`,
-		`Subject: ${subject}`,
+		`Subject: ${header_value(subject, 'subject')}`,
 		'MIME-Version: 1.0',
 		'Content-Type: text/plain; charset=UTF-8',
 		'Content-Transfer-Encoding: 8bit',

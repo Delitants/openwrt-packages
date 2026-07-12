@@ -22,6 +22,44 @@ rejected(() => split_recipients('a@example.test\nb@example.test'),
 	'line feed in recipients rejected');
 rejected(() => split_recipients('a@example.test,,b@example.test'),
 	'empty recipient rejected');
+deep_equal(split_recipients('user.name+tag@example-domain.test'),
+	['user.name+tag@example-domain.test'], 'restricted ASCII addr-spec accepted');
+rejected(() => split_recipients('user@@example.test'),
+	'multiple at signs rejected');
+rejected(() => split_recipients('@example.test'),
+	'empty local part rejected');
+rejected(() => split_recipients('user@'),
+	'empty domain rejected');
+rejected(() => split_recipients('.user@example.test'),
+	'leading local-part dot rejected');
+rejected(() => split_recipients('user.@example.test'),
+	'trailing local-part dot rejected');
+rejected(() => split_recipients('user..name@example.test'),
+	'consecutive local-part dots rejected');
+rejected(() => split_recipients('user@example..test'),
+	'empty domain label rejected');
+rejected(() => split_recipients('user@-example.test'),
+	'leading domain-label hyphen rejected');
+rejected(() => split_recipients('user@example-.test'),
+	'trailing domain-label hyphen rejected');
+rejected(() => split_recipients('user:tag@example.test'),
+	'local-part colon rejected');
+rejected(() => split_recipients('user;tag@example.test'),
+	'local-part semicolon rejected');
+rejected(() => split_recipients('"user"@example.test'),
+	'quoted local part rejected');
+rejected(() => split_recipients('user(comment)@example.test'),
+	'address comment syntax rejected');
+rejected(() => split_recipients('usér@example.test'),
+	'Unicode local part rejected');
+rejected(() => split_recipients('user@exämple.test'),
+	'Unicode domain rejected');
+rejected(() => split_recipients(
+	'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.test'),
+	'local part over 64 bytes rejected');
+rejected(() => split_recipients(
+	'user@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.test'),
+	'domain label over 63 bytes rejected');
 
 let smtp = {
 	server: 'smtp.example.test', port: 587, tls: 'starttls',
@@ -61,6 +99,8 @@ equal(match(no_tls, /(^|\n)tls_starttls /), null,
 
 rejected(() => render_msmtp({ ...smtp, server: 'smtp.example.test\npassword stolen' }),
 	'msmtp line injection rejected');
+rejected(() => render_msmtp({ ...smtp, from: 'router:admin@example.test' }),
+	'invalid From addr-spec rejected');
 
 let context = {
 	smtp,
@@ -122,7 +162,40 @@ truthy(match(recovery, /\nDuration: 2 minutes\n/), 'recovery duration rendered')
 equal(match(recovery, /top-secret-value/), null,
 	'password absent from recovery message');
 
+let unicode_message = render_message('failure', {
+	...context,
+	smtp: { ...smtp, from_name: 'Routér' },
+	monitor: { ...context.monitor, name: 'Café 漢字' }
+});
+truthy(match(unicode_message,
+	/^From: =\?UTF-8\?B\?Um91dMOpcg==\?= <router@example\.test>\n/),
+	'non-ASCII display name uses RFC 2047 encoded-word');
+truthy(match(unicode_message,
+	/\nSubject: =\?UTF-8\?B\?[A-Za-z0-9+\/=]+\?=\n/),
+	'non-ASCII subject uses RFC 2047 encoded-word');
+let unicode_headers = split(unicode_message, '\n\n')[0];
+equal(match(unicode_headers, /Routér|Café|漢字/), null,
+	'non-ASCII bytes absent from header lines');
+
+let long_unicode_message = render_message('failure', {
+	...context,
+	monitor: {
+		...context.monitor,
+		name: 'Café Café Café Café Café Café Café Café Café Café'
+	}
+});
+truthy(match(long_unicode_message,
+	/\nSubject: =\?UTF-8\?B\?[A-Za-z0-9+\/=]+\?=\n =\?UTF-8\?B\?[A-Za-z0-9+\/=]+\?=\n/),
+	'long non-ASCII subject is folded between encoded-words');
+let long_unicode_headers = split(long_unicode_message, '\n\n')[0];
+equal(match(long_unicode_headers, /Café/), null,
+	'long non-ASCII subject has no raw Unicode header bytes');
+
 rejected(() => render_message('failure', {
 	...context,
 	monitor: { ...context.monitor, name: 'Gateway\r\nBcc: thief@example.test' }
 }), 'message header injection rejected');
+rejected(() => render_message('failure', {
+	...context,
+	recipients: ['ops;admin@example.test']
+}), 'invalid To addr-spec rejected');
