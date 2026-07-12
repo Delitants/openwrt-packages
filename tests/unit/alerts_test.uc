@@ -1,5 +1,6 @@
 import { equal } from 'test';
 import { due_alert, mail_succeeded, mail_failed } from 'alerts';
+import { new_state, apply_result } from 'state';
 
 function failed_state(started) {
 	return {
@@ -89,3 +90,48 @@ equal(recovery.recovery_pending, null,
 	'successful recovery mail clears pending recovery');
 equal(recovery.next_mail_attempt, null,
 	'successful recovery mail clears retry schedule');
+
+let recovery_retry_monitor = {
+	enabled: true, failures: 1, recovery_email: true,
+	initial_delay: 0, repeat_interval: 0, max_alerts: 1
+};
+let failed_probe = {
+	ok: false, reason: 'timeout', loss: 100, avg_rtt: null, detail: 'timed out'
+};
+let healthy_probe = {
+	ok: true, reason: null, loss: 0, avg_rtt: 10, detail: 'reachable'
+};
+
+let retry_into_incident = new_state('retry-into-incident');
+equal(apply_result(retry_into_incident, recovery_retry_monitor, failed_probe, 7500),
+	'opened', 'pre-retry incident opens');
+mail_succeeded(retry_into_incident, 'failure', 7500);
+equal(apply_result(retry_into_incident, recovery_retry_monitor, healthy_probe, 7560),
+	'recovered', 'pre-retry incident recovers');
+mail_failed(retry_into_incident, 7560, 300);
+equal(apply_result(retry_into_incident, recovery_retry_monitor, failed_probe, 7620),
+	'opened', 'new incident opens during recovery retry backoff');
+equal(retry_into_incident.next_mail_attempt, 7860,
+	'new incident preserves global mail retry backoff');
+equal(due_alert(retry_into_incident, recovery_retry_monitor, 7859), null,
+	'new incident cannot bypass global mail retry backoff');
+equal(due_alert(retry_into_incident, recovery_retry_monitor, 7860), 'failure',
+	'new incident alert is due at preserved backoff boundary');
+
+let recovery_retry = new_state('recovery-retry');
+equal(apply_result(recovery_retry, recovery_retry_monitor, failed_probe, 8000),
+	'opened', 'recovery-retry incident opens');
+mail_succeeded(recovery_retry, 'failure', 8000);
+equal(apply_result(recovery_retry, recovery_retry_monitor, healthy_probe, 8060),
+	'recovered', 'recovery-retry incident recovers');
+equal(due_alert(recovery_retry, recovery_retry_monitor, 8060), 'recovery',
+	'recovery-retry mail is initially due');
+mail_failed(recovery_retry, 8060, 300);
+equal(apply_result(recovery_retry, recovery_retry_monitor, healthy_probe, 8120),
+	'healthy', 'intervening healthy result remains healthy');
+equal(recovery_retry.next_mail_attempt, 8360,
+	'intervening healthy result preserves recovery retry backoff');
+equal(due_alert(recovery_retry, recovery_retry_monitor, 8359), null,
+	'intervening healthy result cannot bypass recovery retry backoff');
+equal(due_alert(recovery_retry, recovery_retry_monitor, 8360), 'recovery',
+	'recovery retry is due at preserved backoff boundary');

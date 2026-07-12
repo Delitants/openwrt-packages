@@ -21,7 +21,6 @@ function clear_active_incident(state) {
 	state.incident_started = null;
 	state.failure_emails = 0;
 	state.last_email = null;
-	state.next_mail_attempt = null;
 	state.recovery_eligible = false;
 };
 
@@ -73,7 +72,6 @@ export function apply_result(state, monitor, result, now) {
 	state.incident_started = now;
 	state.failure_emails = 0;
 	state.last_email = null;
-	state.next_mail_attempt = null;
 	state.recovery_eligible = false;
 	state.recovery_pending = null;
 	return 'opened';

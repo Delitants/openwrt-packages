@@ -58,7 +58,7 @@ deep_equal(alerted.recovery_pending, {
 equal(alerted.incident_started, null, 'recovery clears active incident timestamp');
 equal(alerted.failure_emails, 0, 'recovery clears successful failure-email count');
 equal(alerted.last_email, null, 'recovery clears active incident mail timestamp');
-equal(alerted.next_mail_attempt, null, 'recovery clears active incident retry time');
+equal(alerted.next_mail_attempt, 800, 'recovery preserves global mail retry time');
 equal(alerted.recovery_eligible, false, 'recovery clears active eligibility');
 
 equal(apply_result(alerted, immediate, bad, 900), 'opened', 'later failure opens new incident');
