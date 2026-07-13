@@ -24,6 +24,7 @@ fi
 exit "$status"`;
 const MSMTP_PROCESS_TIMEOUT_MS = 65000;
 const SCHEDULER_INTERVAL_MS = 1000;
+const SHUTDOWN_TIMEOUT_MS = 5000;
 
 let daemon_started = time();
 let last_reload = daemon_started;
@@ -38,6 +39,9 @@ let state_by_id = {};
 let next_check = {};
 let generation = 0;
 let scheduler = null;
+let shutting_down = false;
+let active_deliveries = [];
+let shutdown_timer = null;
 
 function persist_status() {
 	if (!write_status(daemon_started, last_reload, mail_error, states))
@@ -119,6 +123,9 @@ function monitor_state_is_current(id, state) {
 };
 
 function record_probe_result(id, state, run_generation, result) {
+	if (shutting_down)
+		return;
+
 	let completed_at = time();
 	let current_monitor = monitor_by_id[id];
 
@@ -155,6 +162,9 @@ function record_probe_result(id, state, run_generation, result) {
 };
 
 function start_monitor_check(monitor) {
+	if (shutting_down)
+		return false;
+
 	let state = state_by_id[monitor.id];
 
 	if (!state || state.busy || state.mail_busy || !monitor.enabled)
@@ -243,11 +253,90 @@ function kill_delivery_process(process_handle) {
 	return !!killer;
 };
 
+function finish_shutdown() {
+	if (shutdown_timer) {
+		shutdown_timer.cancel();
+		shutdown_timer = null;
+	}
+
+	uloop.end();
+};
+
+function remove_active_delivery(context) {
+	let remaining = [];
+
+	for (let active in active_deliveries) {
+		if (active !== context)
+			push(remaining, active);
+	}
+
+	active_deliveries = remaining;
+
+	if (shutting_down && !length(active_deliveries))
+		finish_shutdown();
+};
+
+function stop_active_delivery(context) {
+	try {
+		context.stop();
+	}
+	catch (error) {
+		return false;
+	}
+
+	return true;
+};
+
+function begin_shutdown() {
+	if (shutting_down)
+		return;
+
+	shutting_down = true;
+	log.syslog('notice', 'daemon shutdown requested');
+
+	if (scheduler) {
+		scheduler.cancel();
+		scheduler = null;
+	}
+
+	for (let context in active_deliveries)
+		stop_active_delivery(context);
+
+	if (!length(active_deliveries)) {
+		finish_shutdown();
+		return;
+	}
+
+	try {
+		shutdown_timer = uloop.timer(SHUTDOWN_TIMEOUT_MS,
+			() => finish_shutdown());
+	}
+	catch (error) {
+		finish_shutdown();
+		return;
+	}
+
+	if (!shutdown_timer)
+		finish_shutdown();
+};
+
 function start_delivery(message, callback) {
+	if (shutting_down)
+		return false;
+
 	let process_handle = null;
 	let timeout_handle = null;
 	let completed = false;
 	let result_file = null;
+	let context = { stop: null };
+
+	function cancel_delivery_timeout() {
+		if (!timeout_handle)
+			return;
+
+		timeout_handle.cancel();
+		timeout_handle = null;
+	};
 
 	function close_delivery_result() {
 		if (!result_file)
@@ -279,13 +368,17 @@ function start_delivery(message, callback) {
 			return;
 
 		completed = true;
+		cancel_delivery_timeout();
+		close_delivery_result();
+		remove_active_delivery(context);
 
-		if (timeout_handle) {
-			timeout_handle.cancel();
-			timeout_handle = null;
-		}
+		if (!shutting_down) callback(delivered === true);
+	};
 
-		callback(delivered === true);
+	context.stop = () => {
+		cancel_delivery_timeout();
+		close_delivery_result();
+		kill_delivery_process(process_handle);
 	};
 
 	let input = prepare_message_input(message);
@@ -318,6 +411,8 @@ function start_delivery(message, callback) {
 		return false;
 	}
 
+	push(active_deliveries, context);
+
 	try {
 		timeout_handle = uloop.timer(MSMTP_PROCESS_TIMEOUT_MS, () => {
 			kill_delivery_process(process_handle);
@@ -329,6 +424,7 @@ function start_delivery(message, callback) {
 		completed = true;
 		kill_delivery_process(process_handle);
 		close_delivery_result();
+		remove_active_delivery(context);
 		return false;
 	}
 
@@ -336,6 +432,7 @@ function start_delivery(message, callback) {
 		completed = true;
 		kill_delivery_process(process_handle);
 		close_delivery_result();
+		remove_active_delivery(context);
 		return false;
 	}
 
@@ -360,6 +457,9 @@ function alert_render_failed(state, now, error_text) {
 };
 
 function start_alert(monitor, state, kind, now) {
+	if (shutting_down)
+		return false;
+
 	if (!mail_config_ready) {
 		alert_render_failed(state, now, 'mail configuration invalid');
 		return false;
@@ -425,6 +525,9 @@ function start_alert(monitor, state, kind, now) {
 };
 
 function scheduler_tick() {
+	if (shutting_down || !scheduler)
+		return;
+
 	let now = time();
 
 	for (let monitor in monitors) {
@@ -444,10 +547,14 @@ function scheduler_tick() {
 			start_alert(monitor, state, kind, now);
 	}
 
-	scheduler.set(SCHEDULER_INTERVAL_MS);
+	if (!shutting_down && scheduler)
+		scheduler.set(SCHEDULER_INTERVAL_MS);
 };
 
 function load_configuration() {
+	if (shutting_down)
+		return false;
+
 	let cursor = uci.cursor();
 	let next_global;
 	let next_smtp;
@@ -511,6 +618,9 @@ function load_configuration() {
 
 function request_check(request) {
 	try {
+		if (shutting_down)
+			return { ok: false, error: 'service stopping' };
+
 		let id = request.args?.id;
 		let monitor = type(id) == 'string' ? monitor_by_id[id] : null;
 		let state = type(id) == 'string' ? state_by_id[id] : null;
@@ -559,6 +669,9 @@ function request_test_email(request) {
 	let message;
 
 	try {
+		if (shutting_down)
+			return { ok: false, error: 'service stopping' };
+
 		if (!mail_config_ready)
 			return { ok: false, error: 'mail configuration invalid' };
 
@@ -643,10 +756,19 @@ let service_object = conn.publish('netwatch', {
 if (!service_object)
 	die('unable to publish ubus service\n');
 
-let reload_signal = uloop.signal('HUP', () => load_configuration());
+let reload_signal = uloop.signal('HUP', () => {
+	if (!shutting_down)
+		load_configuration();
+});
 
 if (!reload_signal)
 	die('unable to install reload handler\n');
+
+let terminate_signal = uloop.signal('TERM', () => begin_shutdown());
+let interrupt_signal = uloop.signal('INT', () => begin_shutdown());
+
+if (!terminate_signal || !interrupt_signal)
+	die('unable to install shutdown handlers\n');
 
 scheduler = uloop.timer(0, scheduler_tick);
 

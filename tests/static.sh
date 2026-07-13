@@ -54,7 +54,18 @@ if [ "$fail" -eq 0 ]; then
 		'const MSMTP_PROCESS_TIMEOUT_MS = 65000;' \
 		"uloop.process('/bin/sh'" \
 		"uloop.process('/bin/kill'" \
-		'delivery_result_succeeded'
+		'delivery_result_succeeded' \
+		'const SHUTDOWN_TIMEOUT_MS = 5000;' \
+		'let active_deliveries = [];' \
+		'push(active_deliveries, context);' \
+		"let terminate_signal = uloop.signal('TERM'" \
+		"let interrupt_signal = uloop.signal('INT'" \
+		'scheduler.cancel();' \
+		'shutdown_timer.cancel();' \
+		'stop_active_delivery' \
+		'if (!shutting_down) callback(delivered === true);' \
+		'if (shutting_down && !length(active_deliveries))' \
+		'uloop.end()'
 	do
 		if ! grep -Fq -- "$declaration" \
 			"$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
@@ -90,6 +101,18 @@ if [ "$fail" -eq 0 ]; then
 		END { exit bad ? 0 : 1 }
 	' "$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
 		echo 'fired delivery timer is not explicitly released' >&2
+		fail=1
+	fi
+
+	if awk '
+		/^[[:space:]]*shutdown_timer = null;/ {
+			if (previous !~ /shutdown_timer[.]cancel[(][)];/)
+				bad = 1
+		}
+		!/^[[:space:]]*$/ { previous = $0 }
+		END { exit bad ? 0 : 1 }
+	' "$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+		echo 'shutdown timer is not explicitly released before loop end' >&2
 		fail=1
 	fi
 
