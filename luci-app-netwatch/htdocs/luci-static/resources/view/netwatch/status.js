@@ -177,6 +177,7 @@ function statusRows(status, table, notice) {
 	return configuredMonitors().map(function(monitor) {
 		const id = monitor['.name'];
 		const state = stateById[id] || null;
+		const isChecking = !!checksInFlight[id];
 		const canCheck = state && state.status !== 'disabled' &&
 			!(typeof(state.config_error) === 'string' && state.config_error !== '');
 		const button = E('button', {
@@ -184,7 +185,9 @@ function statusRows(status, table, notice) {
 			'click': handleCheckNow.bind(null, id, table, notice)
 		}, _('Check now'));
 
-		button.disabled = !canCheck;
+		button.disabled = !canCheck || isChecking;
+		if (isChecking)
+			button.classList.add('spinning');
 
 		return [
 			E('span', {}, configuredText(monitor.name, id)),

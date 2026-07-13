@@ -258,6 +258,60 @@ if [ "$fail" -eq 0 ]; then
 
 	node -e '
 		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const begin = source.indexOf("function statusRows");
+		const end = source.indexOf("\n\nfunction showAvailability", begin);
+		if (begin < 0 || end < 0)
+			throw new Error("unable to load status row renderer");
+
+		const checksInFlight = { alpha: true, beta: true };
+		const monitors = [
+			{ ".name": "alpha", name: "Alpha", target: "192.0.2.1" },
+			{ ".name": "beta", name: "Beta", target: "192.0.2.2" }
+		];
+		function E(tag, attrs, children) {
+			const classes = new Set();
+			return {
+				tag,
+				attrs: attrs || {},
+				children,
+				disabled: false,
+				classList: {
+					add: value => classes.add(value),
+					remove: value => classes.delete(value),
+					contains: value => classes.has(value)
+				}
+			};
+		}
+
+		const statusRows = Function(
+			"checksInFlight", "configuredMonitors", "E", "configuredText",
+			"formatTest", "stateBadge", "formatTimestamp", "formatResult",
+			"formatEmails", "handleCheckNow", "_",
+			`${source.slice(begin, end)}; return statusRows;`
+		)(
+			checksInFlight, () => monitors, E, (value, fallback) => value || fallback,
+			() => "test", () => "state", () => "time", () => "result",
+			() => "0", () => {}, value => value
+		);
+		const status = { monitors: [
+			{ id: "alpha", status: "healthy" },
+			{ id: "beta", status: "healthy" }
+		] };
+
+		let rows = statusRows(status, {}, {});
+		if (!rows[0][8].disabled || !rows[0][8].classList.contains("spinning") ||
+			!rows[1][8].disabled || !rows[1][8].classList.contains("spinning"))
+			throw new Error("rebuilt status rows must preserve every active check busy state");
+
+		delete checksInFlight.alpha;
+		rows = statusRows(status, {}, {});
+		if (rows[0][8].disabled || rows[0][8].classList.contains("spinning") ||
+			!rows[1][8].disabled || !rows[1][8].classList.contains("spinning"))
+			throw new Error("completing one check must leave other active rows visibly busy");
+	' "$status" || fail=1
+
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
 		const begin = source.indexOf("function addLeaseChoice");
 		const end = source.indexOf("\n\nreturn view.extend");
 		if (begin < 0 || end < 0)
