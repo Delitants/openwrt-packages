@@ -148,8 +148,13 @@ export function start_probe_with(monitor, callback, dependencies) {
 		return false;
 
 	timeout_handle = dependencies.uloop.timer(parent_timeout_ms, () => {
-		// The timer is firing now; avoid cancelling its handle from finish().
+		// Timers remain registered until cancelled, including while their
+		// callback is firing. Clear the shared reference first so finish() does
+		// not cancel the same handle twice.
+		let fired_handle = timeout_handle;
 		timeout_handle = null;
+		if (fired_handle)
+			fired_handle.cancel();
 
 		if (!task_handle.finished())
 			task_handle.kill();

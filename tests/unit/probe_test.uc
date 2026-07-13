@@ -124,6 +124,7 @@ equal(start_probe_with(ping_monitor, (probe_result) => {
 	callback_reason = probe_result.reason;
 }, dependencies), true, 'second probe starts through injected dependencies');
 timeout_callback();
+equal(timer_cancels, 1, 'timeout path cancels firing timeout');
 equal(task_kills, 1, 'timeout kills unfinished task');
 equal(callback_count, 1, 'timeout path calls parent exactly once');
 equal(callback_reason, 'timeout', 'timeout path returns normalized reason');
