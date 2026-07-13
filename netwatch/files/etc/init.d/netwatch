@@ -4,13 +4,19 @@ USE_PROCD=1
 START=95
 
 start_service() {
+	mkdir -p /var/run/netwatch
+	chmod 0700 /var/run/netwatch
+
 	procd_open_instance
-	procd_set_param command /usr/bin/ucode -L '/usr/share/netwatch/*.uc' /usr/share/netwatch/netwatchd.uc
-	procd_set_param respawn
-	procd_set_param file /etc/config/netwatch
+	procd_set_param command /usr/bin/ucode -L /usr/share/netwatch /usr/share/netwatch/netwatchd.uc
+	procd_set_param respawn 3600 5 5
 	procd_close_instance
 }
 
 reload_service() {
 	procd_send_signal netwatch '*' HUP
+}
+
+service_triggers() {
+	procd_add_reload_trigger netwatch
 }
