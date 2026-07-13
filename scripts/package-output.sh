@@ -4,8 +4,23 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 package_dir=$root/work/sdk/bin/packages
 output_dir=$root/outputs
+git_dir=$root/work/git-metadata
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/netwatch-package-output.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+
+git_repo() {
+	git --git-dir="$git_dir" --work-tree="$root" "$@"
+}
+
+if ! git_repo rev-parse --verify HEAD >/dev/null 2>&1; then
+	echo "error: source Git metadata is unavailable at $git_dir" >&2
+	exit 1
+fi
+
+if ! git_repo diff --quiet -- || ! git_repo diff --cached --quiet --; then
+	echo 'error: refusing to package a source tree with tracked changes' >&2
+	exit 1
+fi
 
 find_one_apk() {
 	label=$1
@@ -37,32 +52,8 @@ cp "$runtime_apk" "$runtime_output"
 cp "$luci_apk" "$luci_output"
 
 source_name=openwrt-netwatch-1.0.0
-source_tree=$tmp/$source_name
-source_list=$tmp/source-files
-tar_list=$tmp/tar-files
 archive=$tmp/$source_name.tar
-mkdir -p "$source_tree"
-
-(
-	cd "$root"
-	find . \
-		\( -path './.git' -o -path './.superpowers' -o -path './work' -o -path './outputs' \) -prune -o \
-		\( -type f -o -type l \) -print
-) | sed 's#^\./##' | LC_ALL=C sort > "$source_list"
-
-while IFS= read -r path; do
-	[ -n "$path" ] || continue
-	mkdir -p "$source_tree/$(dirname -- "$path")"
-	cp -pP "$root/$path" "$source_tree/$path"
-done < "$source_list"
-
-# Give generated directory entries a stable timestamp tied to a source file.
-find "$source_tree" -type d -exec touch -r "$root/README.md" {} \;
-(
-	cd "$tmp"
-	find "$source_name" -print | LC_ALL=C sort > "$tar_list"
-	COPYFILE_DISABLE=1 tar --no-recursion -cf "$archive" -T "$tar_list"
-)
+git_repo archive --format=tar --prefix="$source_name/" HEAD > "$archive"
 gzip -n -f "$archive"
 mv "$archive.gz" "$source_output"
 

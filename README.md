@@ -8,8 +8,8 @@ OpenWrt service and a LuCI interface.
 
 - A router running OpenWrt 25.12.5 for the x86/64 target.
 - Working official OpenWrt package feeds so `apk` can resolve dependencies.
-- For source builds: Docker, `curl`, `tar` with Zstandard support, and
-  `shasum` on the build host.
+- For source builds and verification: Docker, Git, `curl`, `jq`, `gzip`,
+  `tar` with Zstandard support, and `shasum` on the build host.
 
 Both APK manifests declare `noarch`, but this repository pins and verifies
 them with the official OpenWrt 25.12.5 x86/64 SDK. The stable artifact names
@@ -43,17 +43,48 @@ package selections cannot leak into the build. The packaging script publishes:
 ## Build verification
 
 The release artifacts were built with the pinned OpenWrt 25.12.5 x86/64 SDK
-and inspected with its apk-tools 3.0.5. Both APK manifests report version
-`1.0.0-r1` and architecture `noarch`. Inspection also verifies the declared
-runtime and LuCI dependencies, every packaged path, `/etc/config/netwatch` as
-a protected `0600` conffile, the `0755` init script, and the absence of
-world-writable files and test fixture credentials. The translation POT is a
-source-only build input and is intentionally not installed by the LuCI APK.
+and inspected with its apk-tools 3.0.5. The exact replayable verification is:
 
-The local SDK has no matching public signing key, so these APKs are unsigned.
-Use `SHA256SUMS` to check transfer integrity and `--allow-untrusted` only after
-confirming the checksums. The package contents and test suites are verified;
-installation on a live router is not performed by this build workflow.
+```sh
+./tests/run-unit.sh \
+  tests/unit/config_test.uc \
+  tests/unit/ping_test.uc \
+  tests/unit/probe_test.uc \
+  tests/unit/state_test.uc \
+  tests/unit/alerts_test.uc \
+  tests/unit/message_test.uc
+./tests/static.sh
+./scripts/verify-artifacts.sh
+git --git-dir=work/git-metadata --work-tree=. diff --check
+git --git-dir=work/git-metadata --work-tree=. status --short
+```
+
+For direct inspection of the two raw manifests, run:
+
+```sh
+./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
+  /src/outputs/netwatch_1.0.0-r1_all.apk | jq .info
+./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
+  /src/outputs/luci-app-netwatch_1.0.0-r1_all.apk | jq .info
+shasum -a 256 -c outputs/SHA256SUMS
+```
+
+The recorded result is six passing unit suites, a passing static/ucode check,
+and two `1.0.0-r1` `noarch` manifests. The runtime manifest contains the CA
+bundle, `msmtp`, ucode, and all required ucode modules; the LuCI manifest
+contains `luci-base`, `rpcd-mod-luci`, and `netwatch`. All 13 runtime files and
+seven LuCI files match the expected lists. `/etc/config/netwatch` is a
+protected `0600` conffile, the init script is `0755`, and no packaged file is
+group- or world-writable. The credential scan is clean. The translation POT
+is a source-only build input and is intentionally not installed by the LuCI
+APK. Checksums, source-archive exclusions, unique paths, and Git snapshot
+reproducibility also pass.
+
+The package generation step does not use a signing command or key, and strict
+SDK verification does not trust these local APKs. Use `SHA256SUMS` to check
+transfer integrity and `--allow-untrusted` only after confirming the
+checksums. Installation on a live router is not performed by this build
+workflow.
 
 ## Install
 
