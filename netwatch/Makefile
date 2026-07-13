@@ -12,6 +12,7 @@ define Package/netwatch
 	SECTION:=utils
 	CATEGORY:=Utilities
 	TITLE:=Lightweight host and service monitor
+	PKGARCH:=all
 	DEPENDS:=+ucode +ucode-mod-fs +ucode-mod-log +ucode-mod-socket +ucode-mod-ubus +ucode-mod-uci +ucode-mod-uloop +msmtp +ca-bundle
 endef
 

@@ -35,6 +35,23 @@ if ! grep -Fq '# call BuildPackage - OpenWrt buildroot signature' \
 	fail=1
 fi
 
+if ! awk '
+	/^define Package\/netwatch$/ { in_package = 1; next }
+	/^endef$/ && in_package { exit found ? 0 : 1 }
+	in_package && /^[[:space:]]*PKGARCH:=all[[:space:]]*$/ { found = 1 }
+	END { if (in_package && !found) exit 1 }
+' "$root/netwatch/Makefile"; then
+	echo 'runtime package is not explicitly architecture-independent' >&2
+	fail=1
+fi
+
+for declaration in 'PKG_VERSION:=1.0.0' 'PKG_RELEASE:=1'; do
+	if ! grep -Fq -- "$declaration" "$root/luci-app-netwatch/Makefile"; then
+		echo "missing LuCI version declaration: $declaration" >&2
+		fail=1
+	fi
+done
+
 if [ "$fail" -eq 0 ]; then
 	readme="$root/README.md"
 	pot="$root/luci-app-netwatch/po/templates/netwatch.pot"
