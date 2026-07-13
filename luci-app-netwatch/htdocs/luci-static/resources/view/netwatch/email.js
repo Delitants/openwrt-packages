@@ -6,10 +6,28 @@
 'require ui';
 
 const PASSWORD_PLACEHOLDER = '********';
+let testEmailInFlight = false;
 
 const callTestEmail = rpc.declare({
 	object: 'netwatch', method: 'test_email', params: [ 'recipient' ]
 });
+
+function setTestEmailBusy(map, busy) {
+	const field = map.findElement('data-name', '_test_email');
+	const button = field ? field.querySelector('button') : null;
+
+	if (!button)
+		return;
+
+	if (busy) {
+		button.disabled = true;
+		button.classList.add('spinning');
+	}
+	else {
+		button.classList.remove('spinning');
+		button.disabled = false;
+	}
+}
 
 return view.extend({
 	load() {
@@ -106,15 +124,20 @@ return view.extend({
 		o.inputtitle = _('Save, apply, and send test');
 		o.inputstyle = 'apply';
 		o.onclick = function(ev, sectionId) {
-			const button = ev.currentTarget;
+			if (testEmailInFlight)
+				return Promise.resolve();
+
 			const recipientOption = this.section.children.find(child => child.option === '_test_recipient');
 			const recipient = recipientOption ? (recipientOption.formvalue(sectionId) || '') : '';
 
-			button.disabled = true;
-			button.classList.add('spinning');
+			testEmailInFlight = true;
+			setTestEmailBusy(m, true);
 
-			return m.save()
-				.then(() => uci.apply())
+			return m.save(null, true)
+				.then(() => {
+					setTestEmailBusy(m, true);
+					return uci.apply();
+				})
 				.then(() => callTestEmail(recipient))
 				.then(result => {
 					if (!result || result.ok !== true)
@@ -126,8 +149,8 @@ return view.extend({
 					ui.addNotification(null, E('p', _('Test email could not be sent. Check the configuration and system log.')), 'error');
 				})
 				.finally(() => {
-					button.classList.remove('spinning');
-					button.disabled = false;
+					testEmailInFlight = false;
+					setTestEmailBusy(m, false);
 				});
 		};
 

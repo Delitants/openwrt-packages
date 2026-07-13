@@ -193,6 +193,28 @@ if [ "$fail" -eq 0 ]; then
 		node --check "$view" || fail=1
 	done
 
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const begin = source.indexOf("function addLeaseChoice");
+		const end = source.indexOf("\n\nreturn view.extend");
+		if (begin < 0 || end < 0)
+			throw new Error("unable to load DHCP lease choice helpers");
+		const helpers = Function(`${source.slice(begin, end)}; return { addLeaseChoices };`)();
+		const choices = [];
+		helpers.addLeaseChoices({ value: address => choices.push(address) }, {
+			dhcp_leases: [ { ipaddr: "192.0.2.10" } ],
+			dhcp6_leases: [ {
+				ip6addr: "2001:db8::10/128",
+				ip6addrs: [ "2001:db8::20/128", "2001:db8::10/128" ]
+			} ]
+		});
+		const expected = [ "192.0.2.10", "2001:db8::10", "2001:db8::20" ];
+		if (JSON.stringify(choices) !== JSON.stringify(expected))
+			throw new Error(`DHCP choices must be unique host addresses without CIDR prefixes: ${JSON.stringify(choices)}`);
+		if (!source.includes(`o.datatype = '"'"'or(hostname,ipaddr("nomask"))'"'"';`))
+			throw new Error("manual targets must reject IP prefix notation");
+	' "$monitors" || fail=1
+
 	for declaration in \
 		"form.GridSection, 'monitor'" \
 		's.anonymous = false;' \
@@ -252,7 +274,7 @@ if [ "$fail" -eq 0 ]; then
 		'o.password = true;' \
 		"form.Flag, '_clear_password'" \
 		"object: 'netwatch', method: 'test_email', params: [ 'recipient' ]" \
-		'm.save()' \
+		'm.save(null, true)' \
 		'uci.apply()' \
 		'callTestEmail(recipient)' \
 		"classList.add('spinning')" \
@@ -263,6 +285,28 @@ if [ "$fail" -eq 0 ]; then
 			fail=1
 		fi
 	done
+
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const handler = source.indexOf("o.onclick = function(ev, sectionId)");
+		const guard = source.indexOf("if (testEmailInFlight)", handler);
+		const claim = source.indexOf("testEmailInFlight = true;", guard);
+		const firstBusy = source.indexOf("setTestEmailBusy(m, true);", claim);
+		const save = source.indexOf("m.save(null, true)", firstBusy);
+		const secondBusy = source.indexOf("setTestEmailBusy(m, true);", save);
+		const apply = source.indexOf("uci.apply()", secondBusy);
+		const send = source.indexOf("callTestEmail(recipient)", apply);
+		const release = source.indexOf("testEmailInFlight = false;", send);
+		const clearBusy = source.indexOf("setTestEmailBusy(m, false);", release);
+		if (!source.includes("let testEmailInFlight = false;") ||
+			!source.includes("map.findElement('"'"'data-name'"'"', '"'"'_test_email'"'"')") ||
+			![ handler, guard, claim, firstBusy, save, secondBusy, apply, send, release, clearBusy ].every(pos => pos >= 0) ||
+			!(handler < guard && guard < claim && claim < firstBusy && firstBusy < save &&
+				save < secondBusy && secondBusy < apply && apply < send && send < release && release < clearBusy))
+			throw new Error("test email action must stay guarded and visibly busy across the save rerender and apply/send chain");
+		if (source.includes("const button = ev.currentTarget") || source.includes("m.save()"))
+			throw new Error("test email action must not rely on a detached event target or non-silent Map.save");
+	' "$email" || fail=1
 
 	if grep -Eq 'callTestEmail\([^)]*(password|smtp|config)' "$email"; then
 		echo 'test email RPC receives SMTP configuration or password' >&2

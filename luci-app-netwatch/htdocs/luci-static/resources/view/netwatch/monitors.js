@@ -9,11 +9,16 @@ const callDHCPLeases = rpc.declare({
 });
 
 function addLeaseChoice(option, seen, address, hostname) {
-	if (typeof(address) !== 'string' || address === '' || seen[address])
+	if (typeof(address) !== 'string')
 		return;
 
-	seen[address] = true;
-	option.value(address, hostname ? '%s (%s)'.format(hostname, address) : address);
+	const target = address.replace(/\/\d+$/, '');
+
+	if (target === '' || seen[target])
+		return;
+
+	seen[target] = true;
+	option.value(target, hostname ? '%s (%s)'.format(hostname, target) : target);
 }
 
 function addLeaseChoices(option, leaseInfo) {
@@ -69,7 +74,7 @@ return view.extend({
 
 		o = s.option(form.Value, 'target', _('Host or IP address'),
 			_('Select an active DHCP lease or enter a target manually.'));
-		o.datatype = 'or(hostname,ipaddr)';
+		o.datatype = 'or(hostname,ipaddr("nomask"))';
 		o.rmempty = false;
 		addLeaseChoices(o, leaseInfo);
 
