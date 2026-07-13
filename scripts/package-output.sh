@@ -53,7 +53,8 @@ cp "$luci_apk" "$luci_output"
 
 source_name=openwrt-netwatch-1.0.0
 archive=$tmp/$source_name.tar
-git_repo archive --format=tar --prefix="$source_name/" HEAD > "$archive"
+git_repo -c tar.umask=0022 archive \
+	--format=tar --prefix="$source_name/" HEAD > "$archive"
 gzip -n -f "$archive"
 mv "$archive.gz" "$source_output"
 

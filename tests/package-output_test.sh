@@ -22,6 +22,8 @@ git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
 	commit -q -m 'fixture source'
 
 printf 'must not be released\n' > "$tmp/local-only.secret"
+git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
+	config tar.umask 0002
 (
 	cd "$tmp"
 	./scripts/package-output.sh >/dev/null
@@ -42,13 +44,16 @@ fi
 
 first_hash=$(shasum -a 256 "$archive" | awk '{ print $1 }')
 touch "$tmp/README.md" "$tmp/scripts/package-output.sh"
+git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
+	config tar.umask 0077
 (
 	cd "$tmp"
+	umask 0077
 	./scripts/package-output.sh >/dev/null
 )
 second_hash=$(shasum -a 256 "$archive" | awk '{ print $1 }')
 if [ "$first_hash" != "$second_hash" ]; then
-	echo 'source archive changes with working-tree mtimes' >&2
+	echo 'source archive changes with working-tree mtimes or host umask' >&2
 	exit 1
 fi
 
