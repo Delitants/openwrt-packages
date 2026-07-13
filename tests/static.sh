@@ -20,6 +20,7 @@ require_file luci-app-netwatch/Makefile
 require_file luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json
 require_file luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json
 require_file luci-app-netwatch/root/usr/share/ucitrack/luci-app-netwatch.json
+require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js
 require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js
 require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js
 require_file tools/sdk/Dockerfile
@@ -142,6 +143,7 @@ if [ "$fail" -eq 0 ]; then
 	menu="$root/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json"
 	acl="$root/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json"
 	ucitrack="$root/luci-app-netwatch/root/usr/share/ucitrack/luci-app-netwatch.json"
+	status="$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js"
 	monitors="$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js"
 	email="$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js"
 
@@ -189,9 +191,70 @@ if [ "$fail" -eq 0 ]; then
 			throw new Error("invalid Netwatch UCI reload tracking");
 	' "$ucitrack" || fail=1
 
-	for view in "$monitors" "$email"; do
+	for view in "$status" "$monitors" "$email"; do
 		node --check "$view" || fail=1
 	done
+
+	for declaration in \
+		"object: 'netwatch', method: 'status', expect: { '': {} }" \
+		"object: 'netwatch', method: 'check', params: [ 'id' ]" \
+		"uci.load('netwatch')" \
+		"uci.sections('netwatch', 'monitor')" \
+		'poll.add(' \
+		'cbi_update_table(' \
+		"_('Monitor')" \
+		"_('Target')" \
+		"_('Test')" \
+		"_('State')" \
+		"_('Last check')" \
+		"_('Result')" \
+		"_('Incident')" \
+		"_('Emails')" \
+		"_('Unknown')" \
+		"_('Healthy')" \
+		"_('Pending')" \
+		"_('Failed')" \
+		"_('Disabled')" \
+		"_('Invalid configuration')" \
+		"_('Check now')" \
+		"classList.add('spinning')" \
+		'button.disabled = true;' \
+		'callCheck(id)' \
+		'if (!force && hasChecksInFlight())' \
+		'delete checksInFlight[id];' \
+		'refreshStatus(table, notice, true)' \
+		'handleSave: null' \
+		'handleSaveApply: null' \
+		'handleReset: null'
+	do
+		if ! grep -Fq -- "$declaration" "$status"; then
+			echo "missing status view declaration: $declaration" >&2
+			fail=1
+		fi
+	done
+
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const join = source.indexOf("function configuredMonitors");
+		const rows = source.indexOf("function statusRows");
+		const pollGuard = source.indexOf("if (!force && hasChecksInFlight())");
+		const update = source.indexOf("cbi_update_table(", pollGuard);
+		const check = source.indexOf("function handleCheckNow");
+		const claim = source.indexOf("checksInFlight[id] = true;", check);
+		const busy = source.indexOf("button.classList.add('"'"'spinning'"'"')", claim);
+		const rpc = source.indexOf("callCheck(id)", busy);
+		const release = source.indexOf("delete checksInFlight[id];", rpc);
+		const refresh = source.indexOf("refreshStatus(table, notice, true)", release);
+		if (![ join, rows, pollGuard, update, check, claim, busy, rpc, release, refresh ].every(pos => pos >= 0) ||
+			!(join < rows && pollGuard < update && check < claim && claim < busy && busy < rpc && rpc < release && release < refresh))
+			throw new Error("status polling must join UCI metadata and preserve a live check-now busy action");
+		if (!source.includes("monitor['"'"'.name'"'"']") || !source.includes("stateById[id]"))
+			throw new Error("public status entries must be joined to named UCI monitor sections");
+		if (source.includes("innerHTML") || source.includes("last_result.detail"))
+			throw new Error("status view must render DOM-safe normalized text only");
+		if (/addNotification\([^;]*(err(or)?[.]|response[.]|result[.]error)/.test(source))
+			throw new Error("status action notification exposes a remote error string");
+	' "$status" || fail=1
 
 	node -e '
 		const source = require("fs").readFileSync(process.argv[1], "utf8");
