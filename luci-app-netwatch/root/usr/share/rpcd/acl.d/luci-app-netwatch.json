@@ -1,0 +1,18 @@
+{
+	"luci-app-netwatch": {
+		"description": "Grant access to the Netwatch service",
+		"read": {
+			"uci": [ "netwatch" ],
+			"ubus": {
+				"luci-rpc": [ "getDHCPLeases" ],
+				"netwatch": [ "status" ]
+			}
+		},
+		"write": {
+			"uci": [ "netwatch" ],
+			"ubus": {
+				"netwatch": [ "check", "test_email" ]
+			}
+		}
+	}
+}

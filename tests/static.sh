@@ -17,6 +17,11 @@ require_file netwatch/files/etc/init.d/netwatch
 require_file netwatch/files/usr/share/netwatch/store.uc
 require_file netwatch/files/usr/share/netwatch/netwatchd.uc
 require_file luci-app-netwatch/Makefile
+require_file luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json
+require_file luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json
+require_file luci-app-netwatch/root/usr/share/ucitrack/luci-app-netwatch.json
+require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js
+require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js
 require_file tools/sdk/Dockerfile
 require_file scripts/fetch-sdk.sh
 require_file scripts/in-sdk.sh
@@ -131,6 +136,141 @@ if [ "$fail" -eq 0 ]; then
 	if grep -Ein 'password|username|server|recipient|smtp' \
 		"$root/netwatch/files/usr/share/netwatch/store.uc"; then
 		echo 'private field found in public status construction' >&2
+		fail=1
+	fi
+
+	menu="$root/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json"
+	acl="$root/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json"
+	ucitrack="$root/luci-app-netwatch/root/usr/share/ucitrack/luci-app-netwatch.json"
+	monitors="$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js"
+	email="$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js"
+
+	for json in "$menu" "$acl" "$ucitrack"; do
+		node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' \
+			"$json" || fail=1
+	done
+
+	node -e '
+		const menu = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+		const expected = {
+			"admin/services/netwatch": ["Netwatch", 85, "firstchild", null],
+			"admin/services/netwatch/status": ["Status", 10, "view", "netwatch/status"],
+			"admin/services/netwatch/monitors": ["Monitors", 20, "view", "netwatch/monitors"],
+			"admin/services/netwatch/email": ["Email", 30, "view", "netwatch/email"]
+		};
+		if (JSON.stringify(Object.keys(menu).sort()) !== JSON.stringify(Object.keys(expected).sort()))
+			throw new Error("menu must contain exactly the Netwatch parent and three children");
+		for (const [path, values] of Object.entries(expected)) {
+			const entry = menu[path];
+			if (entry.title !== values[0] || entry.order !== values[1] || entry.action?.type !== values[2] ||
+				(values[3] == null ? entry.action?.path != null : entry.action?.path !== values[3]))
+				throw new Error(`invalid menu entry ${path}`);
+		}
+		if (JSON.stringify(menu["admin/services/netwatch"].depends) !== JSON.stringify({ acl: ["luci-app-netwatch"] }))
+			throw new Error("Netwatch parent must require its ACL");
+	' "$menu" || fail=1
+
+	node -e '
+		const acl = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+		const grant = acl["luci-app-netwatch"];
+		if (!grant || Object.keys(acl).length !== 1)
+			throw new Error("ACL must contain exactly one named grant");
+		const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+		if (!same(grant.read?.uci, ["netwatch"]) ||
+			!same(grant.read?.ubus, { "luci-rpc": ["getDHCPLeases"], netwatch: ["status"] }) ||
+			!same(grant.write?.uci, ["netwatch"]) ||
+			!same(grant.write?.ubus, { netwatch: ["check", "test_email"] }))
+			throw new Error("ACL is not the exact least-privilege Netwatch grant");
+	' "$acl" || fail=1
+
+	node -e '
+		const track = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+		if (JSON.stringify(track) !== JSON.stringify({ config: "netwatch", init: "netwatch" }))
+			throw new Error("invalid Netwatch UCI reload tracking");
+	' "$ucitrack" || fail=1
+
+	for view in "$monitors" "$email"; do
+		node --check "$view" || fail=1
+	done
+
+	for declaration in \
+		"form.GridSection, 'monitor'" \
+		's.anonymous = false;' \
+		's.addremove = true;' \
+		"object: 'luci-rpc', method: 'getDHCPLeases', expect: { '': {} }" \
+		'dhcp_leases' \
+		'dhcp6_leases' \
+		'ipaddr' \
+		'ip6addr' \
+		'ip6addrs' \
+		"form.Value, 'target'" \
+		"range(5,86400)" \
+		"range(1,60)" \
+		"range(1,100)" \
+		"range(1,20)" \
+		"range(0,100)" \
+		"range(1,60000)" \
+		"range(1,65535)" \
+		"range(1,1000)" \
+		"form.Value, 'recipients'" \
+		"form.Flag, 'recovery_email'"
+	do
+		if ! grep -Fq -- "$declaration" "$monitors"; then
+			echo "missing monitor view declaration: $declaration" >&2
+			fail=1
+		fi
+	done
+
+	for option in \
+		"o.value('0', _('Immediately'))" \
+		"o.value('300', _('After 5 minutes'))" \
+		"o.value('600', _('After 10 minutes'))" \
+		"o.value('900', _('After 15 minutes'))" \
+		"o.value('1800', _('After 30 minutes'))" \
+		"o.value('3600', _('After 1 hour'))" \
+		"o.value('0', _('One time'))" \
+		"o.value('600', _('Every 10 minutes'))" \
+		"o.value('1800', _('Every 30 minutes'))" \
+		"o.value('3600', _('Every hour'))"
+	do
+		if ! grep -Fq -- "$option" "$monitors"; then
+			echo "missing monitor schedule option: $option" >&2
+			fail=1
+		fi
+	done
+
+	for declaration in \
+		"form.NamedSection, 'main', 'netwatch'" \
+		"form.NamedSection, 'smtp', 'smtp'" \
+		"form.Value, 'server'" \
+		"form.Value, 'port'" \
+		"form.ListValue, 'tls'" \
+		"form.Value, 'from'" \
+		"form.Value, 'recipients'" \
+		"form.Value, 'mail_retry_backoff'" \
+		"form.Value, 'password'" \
+		'o.password = true;' \
+		"form.Flag, '_clear_password'" \
+		"object: 'netwatch', method: 'test_email', params: [ 'recipient' ]" \
+		'm.save()' \
+		'uci.apply()' \
+		'callTestEmail(recipient)' \
+		"classList.add('spinning')" \
+		'button.disabled = true;'
+	do
+		if ! grep -Fq -- "$declaration" "$email"; then
+			echo "missing email view declaration: $declaration" >&2
+			fail=1
+		fi
+	done
+
+	if grep -Eq 'callTestEmail\([^)]*(password|smtp|config)' "$email"; then
+		echo 'test email RPC receives SMTP configuration or password' >&2
+		fail=1
+	fi
+
+	if grep -Eq 'addNotification\([^;]*(err(or)?[.]|response[.]|result[.]error)' "$email"; then
+		echo 'test email notification exposes a remote error string' >&2
 		fail=1
 	fi
 fi

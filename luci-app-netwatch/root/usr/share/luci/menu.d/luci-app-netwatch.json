@@ -1,0 +1,23 @@
+{
+	"admin/services/netwatch": {
+		"title": "Netwatch",
+		"order": 85,
+		"action": { "type": "firstchild" },
+		"depends": { "acl": [ "luci-app-netwatch" ] }
+	},
+	"admin/services/netwatch/status": {
+		"title": "Status",
+		"order": 10,
+		"action": { "type": "view", "path": "netwatch/status" }
+	},
+	"admin/services/netwatch/monitors": {
+		"title": "Monitors",
+		"order": 20,
+		"action": { "type": "view", "path": "netwatch/monitors" }
+	},
+	"admin/services/netwatch/email": {
+		"title": "Email",
+		"order": 30,
+		"action": { "type": "view", "path": "netwatch/email" }
+	}
+}
