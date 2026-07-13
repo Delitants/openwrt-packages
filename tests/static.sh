@@ -28,6 +28,28 @@ require_file README.md
 require_file tools/sdk/Dockerfile
 require_file scripts/fetch-sdk.sh
 require_file scripts/in-sdk.sh
+require_file scripts/build-packages.sh
+require_file scripts/package-output.sh
+
+if ! grep -Fq -- 'tar --no-recursion -cf "$archive" -T "$tar_list"' \
+	"$root/scripts/package-output.sh"; then
+	echo 'source archive creation can recursively duplicate listed paths' >&2
+	fail=1
+fi
+
+for selector in CONFIG_ALL CONFIG_ALL_KMODS CONFIG_ALL_NONSHARED; do
+	if ! grep -Fq -- "# $selector is not set" \
+		"$root/scripts/build-packages.sh"; then
+		echo "build script does not disable SDK-wide selector: $selector" >&2
+		fail=1
+	fi
+done
+
+if grep -Fq -- 'if [ -f .config ]; then' \
+	"$root/scripts/build-packages.sh"; then
+	echo 'build script preserves stale SDK package selections' >&2
+	fail=1
+fi
 
 if ! grep -Fq '# call BuildPackage - OpenWrt buildroot signature' \
 	"$root/luci-app-netwatch/Makefile"; then

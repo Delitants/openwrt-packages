@@ -11,42 +11,49 @@ OpenWrt service and a LuCI interface.
 - For source builds: Docker, `curl`, `tar` with Zstandard support, and
   `shasum` on the build host.
 
-Both packages are architecture-independent (`all`), but this repository pins
-and verifies them with the official OpenWrt 25.12.5 x86/64 SDK. The runtime
-package depends on ucode and its fs, log, socket, ubus, UCI, and uloop modules,
-plus `msmtp` and the CA certificate bundle.
+Both APK manifests declare `noarch`, but this repository pins and verifies
+them with the official OpenWrt 25.12.5 x86/64 SDK. The stable artifact names
+use the conventional `_all` suffix. The runtime package depends on ucode and
+its fs, log, socket, ubus, UCI, and uloop modules, plus `msmtp` and the CA
+certificate bundle.
 
 ## Build
 
-Fetch and verify the pinned SDK, then build both source packages inside the
-SDK container:
+Fetch and verify the pinned SDK, build both source packages inside the SDK
+container, and publish the stable output filenames:
 
 ```sh
 ./scripts/fetch-sdk.sh
-./scripts/in-sdk.sh sh -ec '
-  cd /sdk
-  ./scripts/feeds update -a
-  ./scripts/feeds install -a
-  rm -rf package/netwatch-feed
-  mkdir -p package/netwatch-feed
-  ln -s /src/netwatch package/netwatch-feed/netwatch
-  ln -s /src/luci-app-netwatch package/netwatch-feed/luci-app-netwatch
-  printf "%s\n" \
-    CONFIG_PACKAGE_netwatch=y \
-    CONFIG_PACKAGE_luci-app-netwatch=y >> .config
-  make defconfig
-  make package/netwatch/clean package/luci-app-netwatch/clean
-  make package/netwatch/compile package/luci-app-netwatch/compile V=s -j1
-'
+./scripts/in-sdk.sh ./scripts/build-packages.sh
+./scripts/package-output.sh
 ```
 
-The SDK writes its native package filenames below `work/sdk/bin/packages/`.
-The final packaging step is expected to publish these stable output names
-after a successful build; this list does not claim that prebuilt files are
-checked into the source tree:
+`fetch-sdk.sh` pins the official
+`openwrt-sdk-25.12.5-x86-64_gcc-14.3.0_musl.Linux-x86_64.tar.zst` archive to
+SHA-256
+`0c8df0151a1e88feb7c03d694d61f6a18d51872815b7c811d76e2b77504d5e9c`.
+The build script starts from a fresh package configuration so stale SDK-wide
+package selections cannot leak into the build. The packaging script publishes:
 
 - `outputs/netwatch_1.0.0-r1_all.apk`
 - `outputs/luci-app-netwatch_1.0.0-r1_all.apk`
+- `outputs/openwrt-netwatch-1.0.0-source.tar.gz`
+- `outputs/SHA256SUMS`
+
+## Build verification
+
+The release artifacts were built with the pinned OpenWrt 25.12.5 x86/64 SDK
+and inspected with its apk-tools 3.0.5. Both APK manifests report version
+`1.0.0-r1` and architecture `noarch`. Inspection also verifies the declared
+runtime and LuCI dependencies, every packaged path, `/etc/config/netwatch` as
+a protected `0600` conffile, the `0755` init script, and the absence of
+world-writable files and test fixture credentials. The translation POT is a
+source-only build input and is intentionally not installed by the LuCI APK.
+
+The local SDK has no matching public signing key, so these APKs are unsigned.
+Use `SHA256SUMS` to check transfer integrity and `--allow-untrusted` only after
+confirming the checksums. The package contents and test suites are verified;
+installation on a live router is not performed by this build workflow.
 
 ## Install
 
