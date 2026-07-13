@@ -23,11 +23,212 @@ require_file luci-app-netwatch/root/usr/share/ucitrack/luci-app-netwatch.json
 require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js
 require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js
 require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js
+require_file luci-app-netwatch/po/templates/netwatch.pot
+require_file README.md
 require_file tools/sdk/Dockerfile
 require_file scripts/fetch-sdk.sh
 require_file scripts/in-sdk.sh
 
 if [ "$fail" -eq 0 ]; then
+	readme="$root/README.md"
+	pot="$root/luci-app-netwatch/po/templates/netwatch.pot"
+
+	for heading in Requirements Build Install Configure Troubleshooting Upgrade Uninstall; do
+		if ! grep -Fxq -- "## $heading" "$readme"; then
+			echo "missing README section: $heading" >&2
+			fail=1
+		fi
+	done
+
+	for text in \
+		'OpenWrt 25.12.5' \
+		'x86/64' \
+		'outputs/netwatch_1.0.0-r1_all.apk' \
+		'outputs/luci-app-netwatch_1.0.0-r1_all.apk' \
+		'apk add --allow-untrusted' \
+		'Services > Netwatch' \
+		'port 587 with STARTTLS' \
+		'port 465 with implicit TLS' \
+		'Active incidents and their email counters reset after a router reboot.' \
+		'/etc/init.d/netwatch restart' \
+		'ubus call netwatch status' \
+		'logread -e netwatch' \
+		'apk del luci-app-netwatch netwatch'
+	do
+		if ! grep -Fq -- "$text" "$readme"; then
+			echo "missing README content: $text" >&2
+			fail=1
+		fi
+	done
+
+	node - "$pot" \
+		"$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js" \
+		"$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js" \
+		"$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js" <<'NODE' || fail=1
+const fs = require("fs");
+
+function readString(source, start) {
+	const quote = source.charCodeAt(start);
+	let escaped = false;
+	let end = start + 1;
+
+	for (; end < source.length; end++) {
+		const code = source.charCodeAt(end);
+
+		if (escaped) {
+			escaped = false;
+			continue;
+		}
+
+		if (code === 92) {
+			escaped = true;
+			continue;
+		}
+
+		if (code === quote) {
+			const literal = source.slice(start, end + 1);
+			return {
+				end: end + 1,
+				value: Function(`"use strict"; return (${literal});`)()
+			};
+		}
+	}
+
+	throw new Error(`unterminated string literal at byte ${start}`);
+}
+
+function skipQuoted(source, start) {
+	return readString(source, start).end;
+}
+
+function skipTemplate(source, start) {
+	let escaped = false;
+
+	for (let i = start + 1; i < source.length; i++) {
+		const code = source.charCodeAt(i);
+
+		if (escaped) {
+			escaped = false;
+			continue;
+		}
+
+		if (code === 92) {
+			escaped = true;
+			continue;
+		}
+
+		if (code === 96)
+			return i + 1;
+	}
+
+	throw new Error(`unterminated template literal at byte ${start}`);
+}
+
+function translationLiterals(source) {
+	const values = new Set();
+	const identifier = /[A-Za-z0-9_$]/;
+
+	for (let i = 0; i < source.length;) {
+		const code = source.charCodeAt(i);
+		const next = source.charCodeAt(i + 1);
+
+		if (code === 34 || code === 39) {
+			i = skipQuoted(source, i);
+			continue;
+		}
+
+		if (code === 96) {
+			i = skipTemplate(source, i);
+			continue;
+		}
+
+		if (code === 47 && next === 47) {
+			const end = source.indexOf("\n", i + 2);
+			i = end < 0 ? source.length : end + 1;
+			continue;
+		}
+
+		if (code === 47 && next === 42) {
+			const end = source.indexOf("*/", i + 2);
+			if (end < 0)
+				throw new Error(`unterminated block comment at byte ${i}`);
+			i = end + 2;
+			continue;
+		}
+
+		if (source[i] === "_" &&
+			(i === 0 || !identifier.test(source[i - 1])) &&
+			(i + 1 === source.length || !identifier.test(source[i + 1]))) {
+			let cursor = i + 1;
+			while (/\s/.test(source[cursor] || "")) cursor++;
+
+			if (source[cursor] === "(") {
+				cursor++;
+				while (/\s/.test(source[cursor] || "")) cursor++;
+				const literalCode = source.charCodeAt(cursor);
+
+				if (literalCode === 34 || literalCode === 39) {
+					const parsed = readString(source, cursor);
+					values.add(parsed.value);
+					i = parsed.end;
+					continue;
+				}
+			}
+		}
+
+		i++;
+	}
+
+	return values;
+}
+
+function potMsgids(source) {
+	const values = new Set();
+	const lines = source.split(/\r?\n/);
+	let current = null;
+
+	function finish() {
+		if (current !== null && current !== "")
+			values.add(current);
+		current = null;
+	}
+
+	for (const line of lines) {
+		if (line.startsWith("msgid ")) {
+			finish();
+			current = JSON.parse(line.slice(6));
+		}
+		else if (current !== null && line.startsWith("\"")) {
+			current += JSON.parse(line);
+		}
+		else if (current !== null) {
+			finish();
+		}
+	}
+
+	finish();
+	return values;
+}
+
+const expected = new Set();
+for (const file of process.argv.slice(3)) {
+	for (const value of translationLiterals(fs.readFileSync(file, "utf8")))
+		expected.add(value);
+}
+
+const actual = potMsgids(fs.readFileSync(process.argv[2], "utf8"));
+const missing = [...expected].filter(value => !actual.has(value)).sort();
+const unexpected = [...actual].filter(value => !expected.has(value)).sort();
+
+if (missing.length || unexpected.length) {
+	if (missing.length)
+		console.error(`POT missing msgids: ${JSON.stringify(missing)}`);
+	if (unexpected.length)
+		console.error(`POT unexpected msgids: ${JSON.stringify(unexpected)}`);
+	process.exit(1);
+}
+NODE
+
 	sh -n "$root/netwatch/files/etc/init.d/netwatch" || fail=1
 
 	"$root/scripts/in-sdk.sh" sh -ec '

@@ -1,0 +1,345 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: luci-app-netwatch 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-12 00:00+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "%d%% packet loss"
+msgstr ""
+
+msgid "%s ms average RTT"
+msgstr ""
+
+msgid "%s: %s"
+msgstr ""
+
+msgid "Add monitor"
+msgstr ""
+
+msgid "After 1 hour"
+msgstr ""
+
+msgid "After 10 minutes"
+msgstr ""
+
+msgid "After 15 minutes"
+msgstr ""
+
+msgid "After 30 minutes"
+msgstr ""
+
+msgid "After 5 minutes"
+msgstr ""
+
+msgid "Check high delay"
+msgstr ""
+
+msgid "Check interval"
+msgstr ""
+
+msgid "Check now"
+msgstr ""
+
+msgid "Check packet loss"
+msgstr ""
+
+msgid "Clear stored password"
+msgstr ""
+
+msgid "Comma-separated addresses. Leave empty to use the global recipients."
+msgstr ""
+
+msgid "Comma-separated email addresses used unless a monitor overrides them."
+msgstr ""
+
+msgid "Configure the SMTP server and notification recipients."
+msgstr ""
+
+msgid "Connection failed"
+msgstr ""
+
+msgid "Connection refused"
+msgstr ""
+
+msgid "Could not start test"
+msgstr ""
+
+msgid "Delay too high"
+msgstr ""
+
+msgid "Disabled"
+msgstr ""
+
+msgid "EHLO name"
+msgstr ""
+
+msgid "Emails"
+msgstr ""
+
+msgid "Enable Netwatch"
+msgstr ""
+
+msgid "Enabled"
+msgstr ""
+
+msgid "Every 10 minutes"
+msgstr ""
+
+msgid "Every 30 minutes"
+msgstr ""
+
+msgid "Every hour"
+msgstr ""
+
+msgid "Explicitly remove the stored SMTP password when saving."
+msgstr ""
+
+msgid "Failed"
+msgstr ""
+
+msgid "Failures before down"
+msgstr ""
+
+msgid "First email"
+msgstr ""
+
+msgid "From address"
+msgstr ""
+
+msgid "From name"
+msgstr ""
+
+msgid "Global recipients"
+msgstr ""
+
+msgid "Healthy"
+msgstr ""
+
+msgid "Host or IP address"
+msgstr ""
+
+msgid "Host unreachable"
+msgstr ""
+
+msgid "Immediately"
+msgstr ""
+
+msgid "Incident"
+msgstr ""
+
+msgid "Invalid configuration"
+msgstr ""
+
+msgid "Invalid ping response"
+msgstr ""
+
+msgid "Last check"
+msgstr ""
+
+msgid "Leave the placeholder unchanged to keep the stored password."
+msgstr ""
+
+msgid "Live status is temporarily unavailable."
+msgstr ""
+
+msgid "Mail retry backoff"
+msgstr ""
+
+msgid "Maximum average delay"
+msgstr ""
+
+msgid "Maximum emails"
+msgstr ""
+
+msgid "Maximum packet loss"
+msgstr ""
+
+msgid "Milliseconds."
+msgstr ""
+
+msgid "Monitor"
+msgstr ""
+
+msgid "Monitor DHCP clients or manually entered IP addresses and host names."
+msgstr ""
+
+msgid "Monitors"
+msgstr ""
+
+msgid "Name"
+msgstr ""
+
+msgid "Name lookup failed"
+msgstr ""
+
+msgid "Netwatch email"
+msgstr ""
+
+msgid "Netwatch monitors"
+msgstr ""
+
+msgid "Netwatch status"
+msgstr ""
+
+msgid "Never"
+msgstr ""
+
+msgid "No monitors configured."
+msgstr ""
+
+msgid "No result"
+msgstr ""
+
+msgid "None"
+msgstr ""
+
+msgid "Not configured"
+msgstr ""
+
+msgid "Notifications"
+msgstr ""
+
+msgid "One time"
+msgstr ""
+
+msgid "Optional label"
+msgstr ""
+
+msgid "Optional name sent to the SMTP server."
+msgstr ""
+
+msgid "Optional. Leave empty to use the global recipients."
+msgstr ""
+
+msgid "Packet loss too high"
+msgstr ""
+
+msgid "Password"
+msgstr ""
+
+msgid "Pending"
+msgstr ""
+
+msgid "Percent."
+msgstr ""
+
+msgid "Ping"
+msgstr ""
+
+msgid "Ping failed"
+msgstr ""
+
+msgid "Ping packets"
+msgstr ""
+
+msgid "Port"
+msgstr ""
+
+msgid "Port %d"
+msgstr ""
+
+msgid "Recipient override"
+msgstr ""
+
+msgid "Repeat emails"
+msgstr ""
+
+msgid "Result"
+msgstr ""
+
+msgid "SMTP server"
+msgstr ""
+
+msgid "STARTTLS"
+msgstr ""
+
+msgid "Save, apply, and send test"
+msgstr ""
+
+msgid "Seconds allowed for each test."
+msgstr ""
+
+msgid "Seconds before checks begin after service start."
+msgstr ""
+
+msgid "Seconds between checks."
+msgstr ""
+
+msgid "Seconds to wait after a failed delivery before trying again."
+msgstr ""
+
+msgid "Select an active DHCP lease or enter a target manually."
+msgstr ""
+
+msgid "Send recovery email"
+msgstr ""
+
+msgid "Server"
+msgstr ""
+
+msgid "Startup grace period"
+msgstr ""
+
+msgid "State"
+msgstr ""
+
+msgid "Succeeded"
+msgstr ""
+
+msgid "TCP"
+msgstr ""
+
+msgid "TCP port"
+msgstr ""
+
+msgid "TCP port %d"
+msgstr ""
+
+msgid "TLS from connection start"
+msgstr ""
+
+msgid "TLS mode"
+msgstr ""
+
+msgid "Target"
+msgstr ""
+
+msgid "Test"
+msgstr ""
+
+msgid "Test email"
+msgstr ""
+
+msgid "Test email could not be sent. Check the configuration and system log."
+msgstr ""
+
+msgid "Test email sent successfully."
+msgstr ""
+
+msgid "Test failed"
+msgstr ""
+
+msgid "Test recipient"
+msgstr ""
+
+msgid "The check could not be started. Check the service and system log."
+msgstr ""
+
+msgid "Timed out"
+msgstr ""
+
+msgid "Timeout"
+msgstr ""
+
+msgid "Unknown"
+msgstr ""
+
+msgid "Username"
+msgstr ""
