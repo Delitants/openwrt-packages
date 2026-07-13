@@ -29,6 +29,12 @@ require_file tools/sdk/Dockerfile
 require_file scripts/fetch-sdk.sh
 require_file scripts/in-sdk.sh
 
+if ! grep -Fq '# call BuildPackage - OpenWrt buildroot signature' \
+	"$root/luci-app-netwatch/Makefile"; then
+	echo 'missing LuCI BuildPackage scanner signature' >&2
+	fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
 	readme="$root/README.md"
 	pot="$root/luci-app-netwatch/po/templates/netwatch.pot"
