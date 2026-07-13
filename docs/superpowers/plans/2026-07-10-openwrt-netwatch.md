@@ -520,7 +520,11 @@ Expected: nonzero exit because `store.uc` and `netwatchd.uc` are absent.
 
 - [ ] **Step 3: Implement atomic store and daemon orchestration**
 
-`store.uc` must write `/var/run/netwatch/status.json.tmp`, `fsync`/close it, rename it to `status.json`, and expose only:
+`store.uc` must write `/var/run/netwatch/status.json.tmp`, flush and close it,
+then rename it to `status.json`. This is the approved OpenWrt 25.12.5
+compatibility path because pinned `ucode-mod-fs` exposes `fflush()` but no
+`fsync()`/`fdatasync()` API; `/var/run` is volatile, so the requirement is
+atomic reader visibility rather than reboot persistence. The store exposes only:
 
 ```javascript
 {
