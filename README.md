@@ -219,10 +219,16 @@ package to the same x86_64 feed, build it, copy its canonical
 private key. Invoke `adbsign` once per file:
 
 ```sh
-./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbsign \
-  --sign-key /src/work/signing/private-key.pem \
+./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk --allow-untrusted adbsign \
+  --reset-signatures --sign-key /src/work/signing/private-key.pem \
   /src/feed/x86_64/name-version.apk
+./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk verify \
+  --keys-dir /src/keys /src/feed/x86_64/name-version.apk
 ```
+
+`--allow-untrusted` applies only while replacing the SDK-local input
+signature. The following strict verification must report `OK` before the APK
+is added to the feed index.
 
 Regenerate the one index over every APK in the directory:
 

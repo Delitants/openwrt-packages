@@ -3,6 +3,7 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 script=$root/scripts/rebuild-feed.sh
+readme=$root/README.md
 
 git --git-dir="$root/work/git-metadata" --work-tree="$root" \
 	check-ignore -q .DS_Store || {
@@ -35,6 +36,14 @@ grep -Fq -- '--sign-key' "$script"
 grep -Fq 'verify --keys-dir' "$script"
 grep -Fq 'set -- "$feed_dir"/*.apk' "$script"
 grep -Fq 'private key must be inside the repository working tree' "$script"
+grep -Fq '/apk --allow-untrusted adbsign' "$readme" || {
+	echo 'README signing example does not allow replacing the SDK signature' >&2
+	exit 1
+}
+grep -Fq -- '--reset-signatures --sign-key' "$readme" || {
+	echo 'README signing example does not reset the SDK signature' >&2
+	exit 1
+}
 
 if git --git-dir="$root/work/git-metadata" --work-tree="$root" \
 	ls-files | grep -E '(^|/)(private-key|.*\.key)(\.pem)?$'; then
