@@ -19,6 +19,6 @@ for test_file in "$@"; do
 	"$root/scripts/in-sdk.sh" \
 		ucode \
 		-L /src/tests/lib \
-		-L /src/netwatch/files/usr/share/netwatch \
+		-L /src/packages/netwatch/netwatch/files/usr/share/netwatch \
 		"/src/$test_file"
 done

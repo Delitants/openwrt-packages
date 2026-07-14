@@ -11,19 +11,19 @@ require_file() {
 	fi
 }
 
-require_file netwatch/Makefile
-require_file netwatch/files/etc/config/netwatch
-require_file netwatch/files/etc/init.d/netwatch
-require_file netwatch/files/usr/share/netwatch/store.uc
-require_file netwatch/files/usr/share/netwatch/netwatchd.uc
-require_file luci-app-netwatch/Makefile
-require_file luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json
-require_file luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json
-require_file luci-app-netwatch/root/usr/share/ucitrack/luci-app-netwatch.json
-require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js
-require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js
-require_file luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js
-require_file luci-app-netwatch/po/templates/netwatch.pot
+require_file packages/netwatch/netwatch/Makefile
+require_file packages/netwatch/netwatch/files/etc/config/netwatch
+require_file packages/netwatch/netwatch/files/etc/init.d/netwatch
+require_file packages/netwatch/netwatch/files/usr/share/netwatch/store.uc
+require_file packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc
+require_file packages/netwatch/luci-app-netwatch/Makefile
+require_file packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json
+require_file packages/netwatch/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json
+require_file packages/netwatch/luci-app-netwatch/root/usr/share/ucitrack/luci-app-netwatch.json
+require_file packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js
+require_file packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js
+require_file packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js
+require_file packages/netwatch/luci-app-netwatch/po/templates/netwatch.pot
 require_file README.md
 require_file tools/sdk/Dockerfile
 require_file scripts/fetch-sdk.sh
@@ -52,7 +52,7 @@ if [ "$fail" -eq 0 ]; then
 fi
 
 if ! grep -Fq '# call BuildPackage - OpenWrt buildroot signature' \
-	"$root/luci-app-netwatch/Makefile"; then
+	"$root/packages/netwatch/luci-app-netwatch/Makefile"; then
 	echo 'missing LuCI BuildPackage scanner signature' >&2
 	fail=1
 fi
@@ -62,13 +62,13 @@ if ! awk '
 	/^endef$/ && in_package { exit found ? 0 : 1 }
 	in_package && /^[[:space:]]*PKGARCH:=all[[:space:]]*$/ { found = 1 }
 	END { if (in_package && !found) exit 1 }
-' "$root/netwatch/Makefile"; then
+' "$root/packages/netwatch/netwatch/Makefile"; then
 	echo 'runtime package is not explicitly architecture-independent' >&2
 	fail=1
 fi
 
 for declaration in 'PKG_VERSION:=1.0.0' 'PKG_RELEASE:=1'; do
-	if ! grep -Fq -- "$declaration" "$root/luci-app-netwatch/Makefile"; then
+	if ! grep -Fq -- "$declaration" "$root/packages/netwatch/luci-app-netwatch/Makefile"; then
 		echo "missing LuCI version declaration: $declaration" >&2
 		fail=1
 	fi
@@ -76,7 +76,7 @@ done
 
 if [ "$fail" -eq 0 ]; then
 	readme="$root/README.md"
-	pot="$root/luci-app-netwatch/po/templates/netwatch.pot"
+	pot="$root/packages/netwatch/luci-app-netwatch/po/templates/netwatch.pot"
 
 	for heading in Requirements Build Install Configure Troubleshooting Upgrade Uninstall; do
 		if ! grep -Fxq -- "## $heading" "$readme"; then
@@ -107,9 +107,9 @@ if [ "$fail" -eq 0 ]; then
 	done
 
 	node - "$pot" \
-		"$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js" \
-		"$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js" \
-		"$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js" <<'NODE' || fail=1
+		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js" \
+		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js" \
+		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js" <<'NODE' || fail=1
 const fs = require("fs");
 
 function readString(source, start) {
@@ -274,7 +274,7 @@ if (missing.length || unexpected.length) {
 }
 NODE
 
-	sh -n "$root/netwatch/files/etc/init.d/netwatch" || fail=1
+	sh -n "$root/packages/netwatch/netwatch/files/etc/init.d/netwatch" || fail=1
 
 	"$root/scripts/in-sdk.sh" sh -ec '
 		mkdir -p /tmp/ucode-modules
@@ -285,12 +285,12 @@ NODE
 			/tmp/ucode-modules/uci.so \
 			/tmp/ucode-modules/uloop.so
 
-		for file in netwatch/files/usr/share/netwatch/*.uc; do
+		for file in packages/netwatch/netwatch/files/usr/share/netwatch/*.uc; do
 			module=${file##*/}
 			module=${module%.uc}
 			printf "import * as checked from '\''%s'\'';\n" "$module" > /tmp/check.uc
 			ucode -L /tmp/ucode-modules \
-				-L /src/netwatch/files/usr/share/netwatch -c \
+				-L /src/packages/netwatch/netwatch/files/usr/share/netwatch -c \
 				-o /tmp/netwatch.ucb /tmp/check.uc
 		done
 	' || fail=1
@@ -320,26 +320,26 @@ NODE
 		'uloop.end()'
 	do
 		if ! grep -Fq -- "$declaration" \
-			"$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+			"$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
 			echo "missing daemon declaration: $declaration" >&2
 			fail=1
 		fi
 	done
 
 	if grep -ERn '(^|[^[:alnum:]_])(system|eval)[[:space:]]*\(' \
-		"$root/netwatch/files/usr/share/netwatch"; then
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch"; then
 		echo 'unsafe command execution primitive found' >&2
 		fail=1
 	fi
 
 	if grep -En '(command|argv)[[:space:]]*:' \
-		"$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
 		echo 'generic ubus command parameter found' >&2
 		fail=1
 	fi
 
 	if grep -Fq 'alert_generation == generation' \
-		"$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
 		echo 'successful mail result is incorrectly discarded across reload' >&2
 		fail=1
 	fi
@@ -351,7 +351,7 @@ NODE
 		}
 		!/^[[:space:]]*$/ { previous = $0 }
 		END { exit bad ? 0 : 1 }
-	' "$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+	' "$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
 		echo 'fired delivery timer is not explicitly released' >&2
 		fail=1
 	fi
@@ -363,35 +363,35 @@ NODE
 		}
 		!/^[[:space:]]*$/ { previous = $0 }
 		END { exit bad ? 0 : 1 }
-	' "$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+	' "$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
 		echo 'shutdown timer is not explicitly released before loop end' >&2
 		fail=1
 	fi
 
 	if grep -Fq 'fs.popen(MSMTP_COMMAND' \
-		"$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
 		echo 'delivery watchdog does not own the msmtp process' >&2
 		fail=1
 	fi
 
 	if grep -Fq 'finish(exit_code == 0)' \
-		"$root/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
 		echo 'lossy uloop signal status is treated as successful mail' >&2
 		fail=1
 	fi
 
 	if grep -Ein 'password|username|server|recipient|smtp' \
-		"$root/netwatch/files/usr/share/netwatch/store.uc"; then
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/store.uc"; then
 		echo 'private field found in public status construction' >&2
 		fail=1
 	fi
 
-	menu="$root/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json"
-	acl="$root/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json"
-	ucitrack="$root/luci-app-netwatch/root/usr/share/ucitrack/luci-app-netwatch.json"
-	status="$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js"
-	monitors="$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js"
-	email="$root/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js"
+	menu="$root/packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json"
+	acl="$root/packages/netwatch/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json"
+	ucitrack="$root/packages/netwatch/luci-app-netwatch/root/usr/share/ucitrack/luci-app-netwatch.json"
+	status="$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js"
+	monitors="$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js"
+	email="$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js"
 
 	for json in "$menu" "$acl" "$ucitrack"; do
 		node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' \

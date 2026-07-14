@@ -18,7 +18,7 @@
 - The committed public key is `keys/netwatch-local.pem`.
 - The private signing key remains ignored at `work/signing/private-key.pem` and is never committed.
 - Package and index verification must use strict `apk verify`; `--allow-untrusted` is not acceptable for the published installation workflow.
-- Preserve the user's untracked `.DS_Store` without adding, changing, or deleting it.
+- Remove `.DS_Store` and do not publish it.
 
 ---
 
@@ -44,6 +44,7 @@
 - Move: `luci-app-netwatch/` to `packages/netwatch/luci-app-netwatch/`
 - Modify: `scripts/build-packages.sh`
 - Modify: `scripts/verify-artifacts.sh`
+- Modify: `tests/run-unit.sh`
 - Modify: `tests/static.sh`
 
 **Interfaces:**
@@ -123,7 +124,14 @@ ln -s /src/packages/netwatch/luci-app-netwatch "$feed_dir/luci-app-netwatch"
 ```
 
 Replace every source-package root in `tests/static.sh` and
-`scripts/verify-artifacts.sh` with the corresponding nested path. The source
+`scripts/verify-artifacts.sh` with the corresponding nested path. Change the
+runtime module path in `tests/run-unit.sh` to:
+
+```sh
+-L /src/packages/netwatch/netwatch/files/usr/share/netwatch
+```
+
+The source
 archive required entries become:
 
 ```text
@@ -153,7 +161,7 @@ Expected: layout test passes, six unit suites pass, and static verification pass
 
 ```sh
 git --git-dir=work/git-metadata --work-tree=. add \
-  packages scripts/build-packages.sh scripts/verify-artifacts.sh \
+  packages scripts/build-packages.sh scripts/verify-artifacts.sh tests/run-unit.sh \
   tests/static.sh tests/repository-layout_test.sh
 git --git-dir=work/git-metadata --work-tree=. commit \
   -m "refactor: nest OpenWrt package sources"
@@ -467,7 +475,7 @@ git --git-dir=work/git-metadata --work-tree=. ls-files | \
   grep -E '(^|/)(private-key|.*\.key)(\.pem)?$' && exit 1 || true
 ```
 
-Expected: only the user's existing `?? .DS_Store` is untracked; no private key is listed.
+Expected: the working tree is clean and no private key is listed.
 
 - [ ] **Step 4: Commit any deterministic index refresh**
 
@@ -554,7 +562,7 @@ gh repo view Delitants/openwrt-packages \
 git --git-dir=work/git-metadata --work-tree=. status --short
 ```
 
-Expected: repository is `PUBLIC`, default branch is `main`, and local status contains no tracked changes and only the preserved `?? .DS_Store`.
+Expected: repository is `PUBLIC`, default branch is `main`, and local status is clean.
 
 ---
 

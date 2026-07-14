@@ -8,7 +8,10 @@ if [ ! -x ./scripts/feeds ]; then
 	exit 1
 fi
 
-for source_dir in /src/netwatch /src/luci-app-netwatch; do
+for source_dir in \
+	/src/packages/netwatch/netwatch \
+	/src/packages/netwatch/luci-app-netwatch
+do
 	if [ ! -f "$source_dir/Makefile" ]; then
 		echo "error: missing package source: $source_dir" >&2
 		exit 1
@@ -26,8 +29,8 @@ esac
 
 rm -rf "$feed_dir"
 mkdir -p "$feed_dir"
-ln -s /src/netwatch "$feed_dir/netwatch"
-ln -s /src/luci-app-netwatch "$feed_dir/luci-app-netwatch"
+ln -s /src/packages/netwatch/netwatch "$feed_dir/netwatch"
+ln -s /src/packages/netwatch/luci-app-netwatch "$feed_dir/luci-app-netwatch"
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a

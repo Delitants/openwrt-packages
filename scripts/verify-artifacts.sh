@@ -141,8 +141,8 @@ for required in \
 	openwrt-netwatch-1.0.0/scripts/build-packages.sh \
 	openwrt-netwatch-1.0.0/scripts/package-output.sh \
 	openwrt-netwatch-1.0.0/scripts/verify-artifacts.sh \
-	openwrt-netwatch-1.0.0/netwatch/Makefile \
-	openwrt-netwatch-1.0.0/luci-app-netwatch/Makefile
+	openwrt-netwatch-1.0.0/packages/netwatch/netwatch/Makefile \
+	openwrt-netwatch-1.0.0/packages/netwatch/luci-app-netwatch/Makefile
 do
 	grep -Fxq "$required" "$tmp/source-files"
 done
