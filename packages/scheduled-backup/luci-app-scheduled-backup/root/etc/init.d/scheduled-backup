@@ -1,0 +1,57 @@
+#!/bin/sh /etc/rc.common
+
+START=95
+STOP=10
+
+SB_UCI=${SB_UCI:-uci}
+SB_CRONTAB=${SB_CRONTAB:-/etc/crontabs/root}
+SB_CRON_INIT=${SB_CRON_INIT:-/etc/init.d/cron}
+SB_CORE=${SB_CORE:-/usr/lib/scheduled-backup/core.sh}
+SB_MARKER='# luci-app-scheduled-backup'
+
+. "$SB_CORE"
+
+uci_get() {
+	"$SB_UCI" -q get "$1"
+}
+
+signal_cron() {
+	"$SB_CRON_INIT" reload >/dev/null 2>&1 ||
+		"$SB_CRON_INIT" restart >/dev/null 2>&1 || :
+}
+
+sync_cron() {
+	if [ "${1:-}" = disabled ]; then
+		enabled=0
+	else
+		enabled=$(uci_get scheduled-backup.main.enabled) || enabled=0
+	fi
+	tmp=${SB_CRONTAB}.scheduled-backup.$$
+	trap 'rm -f "$tmp"' EXIT HUP INT TERM
+	if [ -f "$SB_CRONTAB" ]; then
+		sed '\|# luci-app-scheduled-backup$|d' "$SB_CRONTAB" >"$tmp" || return 1
+	else
+		: >"$tmp" || return 1
+	fi
+	if [ "$enabled" = 1 ]; then
+		mode=$(uci_get scheduled-backup.main.schedule_mode) || return 1
+		hour=$(uci_get scheduled-backup.main.hour) || return 1
+		minute=$(uci_get scheduled-backup.main.minute) || return 1
+		weekday=$(uci_get scheduled-backup.main.weekday) || return 1
+		sb_validate_uint hour "$hour" 0 23 || return 1
+		sb_validate_uint minute "$minute" 0 59 || return 1
+		sb_validate_uint weekday "$weekday" 0 6 || return 1
+		line=$(sb_cron_line "$mode" "$hour" "$minute" "$weekday") || return 1
+		printf '%s %s\n' "$line" "$SB_MARKER" >>"$tmp" || return 1
+	elif [ "$enabled" != 0 ]; then
+		return 1
+	fi
+	chmod 600 "$tmp" || return 1
+	mv -f "$tmp" "$SB_CRONTAB" || return 1
+	trap - EXIT HUP INT TERM
+	signal_cron
+}
+
+start() { sync_cron; }
+reload() { sync_cron; }
+stop() { sync_cron disabled; }

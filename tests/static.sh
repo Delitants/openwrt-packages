@@ -24,6 +24,11 @@ require_file packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/vi
 require_file packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js
 require_file packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js
 require_file packages/netwatch/luci-app-netwatch/po/templates/netwatch.pot
+require_file packages/scheduled-backup/luci-app-scheduled-backup/Makefile
+require_file packages/scheduled-backup/luci-app-scheduled-backup/root/usr/sbin/scheduled-backup
+require_file packages/scheduled-backup/luci-app-scheduled-backup/root/etc/config/scheduled-backup
+require_file packages/scheduled-backup/luci-app-scheduled-backup/htdocs/luci-static/resources/view/scheduled-backup.js
+require_file packages/scheduled-backup/luci-app-scheduled-backup/tests/run.sh
 require_file README.md
 require_file tools/sdk/Dockerfile
 require_file scripts/fetch-sdk.sh
@@ -75,7 +80,9 @@ for declaration in 'PKG_VERSION:=1.0.0' 'PKG_RELEASE:=1'; do
 done
 
 if [ "$fail" -eq 0 ]; then
-	readme="$root/README.md"
+	index_readme="$root/README.md"
+	readme="$root/packages/netwatch/README.md"
+	scheduled_readme="$root/packages/scheduled-backup/luci-app-scheduled-backup/README.md"
 	pot="$root/packages/netwatch/luci-app-netwatch/po/templates/netwatch.pot"
 
 	for heading in Requirements Build Install Configure Troubleshooting Upgrade Uninstall; do
@@ -109,6 +116,30 @@ if [ "$fail" -eq 0 ]; then
 			fail=1
 		fi
 	done
+
+	for text in \
+		'apk add luci-app-scheduled-backup' \
+		'System > Scheduled Backup' \
+		'local and SFTP destinations' \
+		'OpenWrt native restore'
+	do
+		if ! grep -Fq -- "$text" "$scheduled_readme"; then
+			echo "missing scheduled-backup README content: $text" >&2
+			fail=1
+		fi
+	done
+
+	for link in \
+		'[Netwatch](packages/netwatch/README.md)' \
+		'[Scheduled Backup](packages/scheduled-backup/luci-app-scheduled-backup/README.md)'
+	do
+		if ! grep -Fq -- "$link" "$index_readme"; then
+			echo "missing package index link: $link" >&2
+			fail=1
+		fi
+	done
+
+	"$root/packages/scheduled-backup/luci-app-scheduled-backup/tests/run.sh" || fail=1
 
 	node - "$pot" \
 		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js" \
