@@ -4,6 +4,11 @@ Netwatch monitors hosts with ICMP ping or TCP connection tests and sends
 rate-limited SMTP failure and recovery notifications. It includes a native
 OpenWrt service and a LuCI interface.
 
+This project is published as part of the public `Delitants/openwrt-packages`
+multi-package repository. Related OpenWrt package sources are grouped below
+`packages/<project>/`, while all x86_64 installable packages share one signed
+binary feed.
+
 ## Requirements
 
 - A router running OpenWrt 25.12.5 for the x86/64 target.
@@ -80,30 +85,34 @@ is a source-only build input and is intentionally not installed by the LuCI
 APK. Checksums, source-archive exclusions, unique paths, and Git snapshot
 reproducibility also pass.
 
-The package generation step does not use a signing command or key, and strict
-SDK verification does not trust these local APKs. Use `SHA256SUMS` to check
-transfer integrity and `--allow-untrusted` only after confirming the
-checksums. Installation on a live router is not performed by this build
-workflow.
+The package generation step itself does not use a signing command or key.
+Release APKs are signed separately before being copied into `feed/x86_64/`.
+The feed rebuild then strictly verifies every APK against the committed public
+key, generates the signed `packages.adb`, and strictly verifies the index.
+Installation on a live router is not performed by the build workflow.
 
 ## Install
 
-Copy the two APK files to `/tmp` on the router. Install the runtime first and
-the LuCI application second:
+On OpenWrt 25.12.5, install the repository public key and add the complete
+`packages.adb` URL to the persistent custom-feed file:
 
 ```sh
+wget -O /etc/apk/keys/netwatch-local.pem \
+  https://raw.githubusercontent.com/Delitants/openwrt-packages/main/keys/netwatch-local.pem
+
+feed_url='https://raw.githubusercontent.com/Delitants/openwrt-packages/main/feed/x86_64/packages.adb'
+grep -Fqx "$feed_url" /etc/apk/repositories.d/customfeeds.list || \
+  printf '%s\n' "$feed_url" >> /etc/apk/repositories.d/customfeeds.list
+
 apk update
-apk add --allow-untrusted /tmp/netwatch_1.0.0-r1_all.apk
-apk add --allow-untrusted /tmp/luci-app-netwatch_1.0.0-r1_all.apk
+apk add netwatch luci-app-netwatch
 /etc/init.d/netwatch enable
 /etc/init.d/netwatch restart
 ```
 
-`apk` installs declared dependencies from the router's configured signed
-feeds. `--allow-untrusted` is needed for these locally built, unsigned APKs;
-only install artifacts you built yourself or verified against the supplied
-checksums. The LuCI package depends on the runtime package, but the explicit
-order above makes failures easier to diagnose.
+The public key makes both packages and the repository index trusted, so the
+installation does not use `--allow-untrusted`. The LuCI package depends on the
+runtime package; listing both makes the requested installation explicit.
 
 After installation, refresh LuCI and open `Services > Netwatch`.
 
@@ -202,6 +211,31 @@ uci commit netwatch
 Runtime state is kept in `/var/run/netwatch`, not written to flash. A service
 reload retains state for unchanged named monitor sections. Active incidents and their email counters reset after a router reboot.
 
+## Package feed maintenance
+
+Keep each related source group below `packages/<project>/`. To add another
+package to the same x86_64 feed, build it, copy its canonical
+`name-version.apk` file into `feed/x86_64/`, and sign that APK with the same
+private key. Invoke `adbsign` once per file:
+
+```sh
+./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbsign \
+  --sign-key /src/work/signing/private-key.pem \
+  /src/feed/x86_64/name-version.apk
+```
+
+Regenerate the one index over every APK in the directory:
+
+```sh
+./scripts/rebuild-feed.sh x86_64 work/signing/private-key.pem
+```
+
+The rebuild refuses unsigned packages and packages signed by a key not found
+in `keys/`. It signs and strictly verifies `feed/x86_64/packages.adb`, so the
+router feed URL remains unchanged as packages are added. Commit the public
+key, APKs, and signed index. Keep all private keys under ignored `work/`
+storage and never commit them.
+
 ## Troubleshooting
 
 Restart the daemon after command-line configuration changes, inspect its
@@ -222,20 +256,19 @@ The status API and log never expose the SMTP password.
 
 ## Upgrade
 
-Back up the UCI configuration, upload the newer APKs, and install the runtime
-before the LuCI package:
+Back up the UCI configuration, refresh the trusted feed, and request both
+packages:
 
 ```sh
 cp /etc/config/netwatch /root/netwatch.config.backup
-apk add --allow-untrusted /tmp/netwatch_1.0.0-r1_all.apk
-apk add --allow-untrusted /tmp/luci-app-netwatch_1.0.0-r1_all.apk
+apk update
+apk add netwatch luci-app-netwatch
 /etc/init.d/netwatch restart
 ```
 
-Use the actual filenames for the newer release when they differ. The runtime
-declares `/etc/config/netwatch` as a package conffile, so local configuration
-is protected during package replacement. Keep the explicit backup and review
-any `.apk-new` file before merging new defaults.
+The runtime declares `/etc/config/netwatch` as a package conffile, so local
+configuration is protected during package replacement. Keep the explicit
+backup and review any `.apk-new` file before merging new defaults.
 
 ## Uninstall
 

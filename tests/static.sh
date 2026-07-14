@@ -90,7 +90,11 @@ if [ "$fail" -eq 0 ]; then
 		'x86/64' \
 		'outputs/netwatch_1.0.0-r1_all.apk' \
 		'outputs/luci-app-netwatch_1.0.0-r1_all.apk' \
-		'apk add --allow-untrusted' \
+		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/keys/netwatch-local.pem' \
+		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/feed/x86_64/packages.adb' \
+		'/etc/apk/repositories.d/customfeeds.list' \
+		'apk add netwatch luci-app-netwatch' \
+		'./scripts/rebuild-feed.sh x86_64 work/signing/private-key.pem' \
 		'Services > Netwatch' \
 		'port 587 with STARTTLS' \
 		'port 465 with implicit TLS' \
