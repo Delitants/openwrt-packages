@@ -435,7 +435,26 @@ git --git-dir=work/git-metadata --work-tree=. commit \
 - Consumes: Nested sources, signed APKs, signed index, public documentation.
 - Produces: Fresh evidence that the exact tree intended for GitHub is releasable.
 
-- [ ] **Step 1: Run all automated checks**
+- [ ] **Step 1: Rebuild and sign the final APKs from the nested sources**
+
+```sh
+./scripts/in-sdk.sh ./scripts/build-packages.sh
+./scripts/package-output.sh
+./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbsign \
+  --sign-key /src/work/signing/private-key.pem \
+  /src/outputs/netwatch_1.0.0-r1_all.apk
+./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbsign \
+  --sign-key /src/work/signing/private-key.pem \
+  /src/outputs/luci-app-netwatch_1.0.0-r1_all.apk
+cp outputs/netwatch_1.0.0-r1_all.apk feed/x86_64/netwatch-1.0.0-r1.apk
+cp outputs/luci-app-netwatch_1.0.0-r1_all.apk \
+  feed/x86_64/luci-app-netwatch-1.0.0-r1.apk
+```
+
+Expected: both packages compile from `packages/netwatch/`, are signed one file
+per `adbsign` invocation, and replace the feed copies.
+
+- [ ] **Step 2: Run all automated checks**
 
 ```sh
 ./tests/repository-layout_test.sh
@@ -454,7 +473,7 @@ git --git-dir=work/git-metadata --work-tree=. diff --check
 
 Expected: all commands exit 0.
 
-- [ ] **Step 2: Rebuild and verify the feed from scratch**
+- [ ] **Step 3: Rebuild and verify the feed from scratch**
 
 ```sh
 ./scripts/rebuild-feed.sh x86_64 work/signing/private-key.pem
@@ -468,7 +487,7 @@ Expected: all commands exit 0.
 
 Expected: all three artifacts pass strict verification.
 
-- [ ] **Step 3: Audit tracked and untracked state**
+- [ ] **Step 4: Audit tracked and untracked state**
 
 ```sh
 git --git-dir=work/git-metadata --work-tree=. status --short
@@ -478,7 +497,7 @@ git --git-dir=work/git-metadata --work-tree=. ls-files | \
 
 Expected: the working tree is clean and no private key is listed.
 
-- [ ] **Step 4: Commit any deterministic index refresh**
+- [ ] **Step 5: Commit the final rebuilt feed artifacts**
 
 If rebuilding changed `packages.adb`, inspect, stage, verify again, and commit:
 
