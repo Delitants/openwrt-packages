@@ -209,6 +209,7 @@ do
 done
 
 grep -Fq 'mkndx' "$script"
+grep -Fq '"$apk" --allow-untrusted mkndx' "$script"
 grep -Fq -- '--sign-key' "$script"
 grep -Fq 'verify --keys-dir' "$script"
 grep -Fq 'set -- "$feed_dir"/*.apk' "$script"
@@ -308,7 +309,7 @@ container_key=/src/$key_rel
 		"$apk" verify --keys-dir "$keys" "$package"
 	done
 
-	"$apk" mkndx \
+	"$apk" --allow-untrusted mkndx \
 		--description "Delitants OpenWrt package feed" \
 		--sign-key "$key" \
 		--output "$tmp" \
