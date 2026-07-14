@@ -1,0 +1,94 @@
+#!/bin/sh
+set -u
+
+SB_JSONFILTER=${SB_JSONFILTER:-jsonfilter}
+SB_BACKEND=${SB_BACKEND:-/usr/sbin/scheduled-backup}
+SB_STATUS=${SB_STATUS:-/var/run/scheduled-backup.status}
+SB_SECRET_DIR=${SB_SECRET_DIR:-/etc/scheduled-backup}
+
+json_string() {
+	awk 'BEGIN { ORS="" } { if (NR > 1) printf "\\n"; gsub(/\\/, "\\\\"); gsub(/\"/, "\\\""); gsub(/\r/, "\\r"); gsub(/\t/, "\\t"); printf "%s", $0 }'
+}
+
+reply_ok() { printf '{"ok":true}\n'; }
+reply_error() { printf '{"ok":false,"error":"%s"}\n' "$1"; }
+
+read_request() {
+	request=/tmp/scheduled-backup.rpc.$$
+	umask 077
+	cat >"$request" || return 1
+	trap 'rm -f "$request"' EXIT HUP INT TERM
+}
+
+field() {
+	"$SB_JSONFILTER" -i "$request" -e "@.$1" 2>/dev/null
+}
+
+status_json() {
+	printf '{'
+	separator=
+	for key in state started finished filename size local_result local_message sftp_result sftp_message summary; do
+		value=
+		if [ -r "$SB_STATUS" ]; then
+			value=$(sed -n "s/^${key}=//p" "$SB_STATUS" | sed -n '1p')
+		fi
+		printf '%s"%s":"' "$separator" "$key"
+		printf '%s' "$value" | json_string
+		printf '"'
+		separator=,
+	done
+	printf '}\n'
+}
+
+write_secret() {
+	name=$1
+	value=$2
+	[ -n "$value" ] || { reply_error 'value required'; return 1; }
+	umask 077
+	mkdir -p "$SB_SECRET_DIR" || { reply_error 'credential directory failed'; return 1; }
+	tmp=$SB_SECRET_DIR/.${name}.$$
+	if ! printf '%s\n' "$value" >"$tmp" || ! chmod 600 "$tmp" || ! mv -f "$tmp" "$SB_SECRET_DIR/$name"; then
+		rm -f "$tmp"
+		reply_error 'credential write failed'
+		return 1
+	fi
+	reply_ok
+}
+
+list_methods() {
+	printf '%s\n' '{"status":{},"run":{},"test_sftp":{},"trust_host":{"fingerprint":"String"},"set_password":{"password":"String"},"clear_password":{},"set_key":{"key":"String"},"clear_key":{}}'
+}
+
+call_method() {
+	method=${1:-}
+	read_request || { reply_error 'invalid request'; return 1; }
+	case "$method" in
+		status) status_json ;;
+		run)
+			if [ -x "$SB_BACKEND" ] && ( "$SB_BACKEND" run >/dev/null 2>&1 </dev/null & ); then reply_ok; else reply_error 'backup launch failed'; return 1; fi ;;
+		test_sftp)
+			if output=$("$SB_BACKEND" test-sftp 2>/dev/null); then
+				result=$(printf '%s\n' "$output" | sed -n 's/^result=//p' | sed -n '1p')
+				case "$result" in
+					verified) printf '{"ok":true,"result":"verified"}\n' ;;
+					untrusted) printf '{"ok":true,"result":"untrusted","fingerprints":"'; printf '%s\n' "$output" | sed -n 's/^fingerprints=//p' | json_string; printf '"}\n' ;;
+					*) reply_error 'invalid SFTP test response'; return 1 ;;
+				esac
+			else reply_error 'SFTP test failed'; return 1; fi ;;
+		trust_host)
+			fingerprint=$(field fingerprint)
+			[ -n "$fingerprint" ] || { reply_error 'fingerprint required'; return 1; }
+			if "$SB_BACKEND" trust-host "$fingerprint" >/dev/null 2>&1; then reply_ok; else reply_error 'host trust failed'; return 1; fi ;;
+		set_password) write_secret password "$(field password)" ;;
+		clear_password) rm -f "$SB_SECRET_DIR/password"; reply_ok ;;
+		set_key) write_secret id_backup "$(field key)" ;;
+		clear_key) rm -f "$SB_SECRET_DIR/id_backup"; reply_ok ;;
+		*) reply_error 'unknown method'; return 1 ;;
+	esac
+}
+
+case "${1:-}" in
+	list) list_methods ;;
+	call) shift; call_method "${1:-}" ;;
+	*) reply_error 'usage'; exit 1 ;;
+esac

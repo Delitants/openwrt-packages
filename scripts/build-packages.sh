@@ -10,7 +10,8 @@ fi
 
 for source_dir in \
 	/src/packages/netwatch/netwatch \
-	/src/packages/netwatch/luci-app-netwatch
+	/src/packages/netwatch/luci-app-netwatch \
+	/src/packages/scheduled-backup/luci-app-scheduled-backup
 do
 	if [ ! -f "$source_dir/Makefile" ]; then
 		echo "error: missing package source: $source_dir" >&2
@@ -31,6 +32,8 @@ rm -rf "$feed_dir"
 mkdir -p "$feed_dir"
 ln -s /src/packages/netwatch/netwatch "$feed_dir/netwatch"
 ln -s /src/packages/netwatch/luci-app-netwatch "$feed_dir/luci-app-netwatch"
+ln -s /src/packages/scheduled-backup/luci-app-scheduled-backup \
+	"$feed_dir/luci-app-scheduled-backup"
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
@@ -43,22 +46,34 @@ printf '%s\n' \
 	'# CONFIG_ALL_KMODS is not set' \
 	'# CONFIG_ALL_NONSHARED is not set' \
 	'CONFIG_PACKAGE_netwatch=y' \
-	'CONFIG_PACKAGE_luci-app-netwatch=y' >> "$config_tmp"
+	'CONFIG_PACKAGE_luci-app-netwatch=y' \
+	'CONFIG_PACKAGE_luci-app-scheduled-backup=y' >> "$config_tmp"
 mv "$config_tmp" .config
 make defconfig
 
-for check_target in package/netwatch/check package/luci-app-netwatch/check; do
+for check_target in \
+	package/netwatch/check \
+	package/luci-app-netwatch/check \
+	package/luci-app-scheduled-backup/check
+do
 	if make -n "$check_target" V=s -j1 >/dev/null 2>&1; then
 		make "$check_target" V=s -j1
 	else
 		printf 'skipping unsupported SDK target: %s\n' "$check_target"
 	fi
 done
-make package/netwatch/clean package/luci-app-netwatch/clean
+make \
+	package/netwatch/clean \
+	package/luci-app-netwatch/clean \
+	package/luci-app-scheduled-backup/clean
 find /sdk/bin/packages -type f \
-	\( -name 'netwatch-*.apk' -o -name 'luci-app-netwatch-*.apk' \) \
+	\( -name 'netwatch-*.apk' -o -name 'luci-app-netwatch-*.apk' \
+		-o -name 'luci-app-scheduled-backup-*.apk' \) \
 	-delete 2>/dev/null || true
-make package/netwatch/compile package/luci-app-netwatch/compile V=s -j1
+make \
+	package/netwatch/compile \
+	package/luci-app-netwatch/compile \
+	package/luci-app-scheduled-backup/compile V=s -j1
 
 assert_one_apk() {
 	label=$1
@@ -81,3 +96,4 @@ assert_one_apk() {
 # can never satisfy the runtime assertion.
 assert_one_apk runtime 'netwatch-*.apk'
 assert_one_apk LuCI 'luci-app-netwatch-*.apk'
+assert_one_apk 'Scheduled Backup LuCI' 'luci-app-scheduled-backup-*.apk'

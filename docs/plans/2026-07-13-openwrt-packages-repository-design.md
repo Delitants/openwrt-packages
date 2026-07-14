@@ -27,11 +27,14 @@ openwrt-packages/
 |   `-- netwatch/
 |       |-- netwatch/
 |       `-- luci-app-netwatch/
+|   `-- scheduled-backup/
+|       `-- luci-app-scheduled-backup/
 |-- feed/
 |   `-- x86_64/
 |       |-- packages.adb
 |       |-- netwatch-1.0.0-r1.apk
-|       `-- luci-app-netwatch-1.0.0-r1.apk
+|       |-- luci-app-netwatch-1.0.0-r1.apk
+|       `-- luci-app-scheduled-backup-1.0.0-r1.apk
 |-- keys/
 |   `-- netwatch-local.pem
 `-- scripts/
@@ -39,9 +42,9 @@ openwrt-packages/
 ```
 
 Each project receives a directory below `packages/`; a project may contain
-multiple related OpenWrt source packages. Future projects can therefore use
-paths such as `packages/scheduled-backup/luci-app-scheduled-backup/` without
-changing the binary feed URL.
+multiple related OpenWrt source packages. Scheduled Backup uses
+`packages/scheduled-backup/luci-app-scheduled-backup/` without changing the
+binary feed URL.
 
 The binary feed is separate from the source hierarchy. Every APK available to
 the x86_64 router is stored beside `feed/x86_64/packages.adb`, regardless of
@@ -52,7 +55,7 @@ entries without requiring another repository URL.
 
 - Commit only the public RSA key at `keys/netwatch-local.pem`.
 - Never commit the private signing key.
-- Preserve the existing signatures on the two APKs.
+- Preserve valid repository-key signatures on every APK.
 - Build `packages.adb` from all APKs in `feed/x86_64/` and sign the index with
   the same private key.
 - Verify both APK signatures and the generated index with strict `apk verify`
@@ -71,8 +74,8 @@ refuses to find or commit a private key implicitly.
 4. Strictly verify the complete feed with the committed public key.
 5. Commit and push the source and feed changes to `main`.
 
-The initial publication contains Netwatch `1.0.0-r1` and
-`luci-app-netwatch` `1.0.0-r1`.
+The feed contains Netwatch `1.0.0-r1`, `luci-app-netwatch` `1.0.0-r1`, and
+`luci-app-scheduled-backup` `1.0.0-r1`.
 
 ## Router Setup
 
@@ -86,7 +89,7 @@ the native APK repository configuration available on that release.
 Before the GitHub repository is considered published:
 
 - the existing project tests and artifact checks must pass after relocation;
-- both APK files must pass strict signature verification;
+- all APK files must pass strict signature verification;
 - `packages.adb` must pass strict signature verification;
 - the index must contain exactly the expected initial package names and
   versions;

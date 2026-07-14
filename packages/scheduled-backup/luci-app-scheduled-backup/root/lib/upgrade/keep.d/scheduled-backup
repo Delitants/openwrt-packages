@@ -1,0 +1,4 @@
+/etc/config/scheduled-backup
+/etc/scheduled-backup/password
+/etc/scheduled-backup/id_backup
+/etc/scheduled-backup/known_hosts

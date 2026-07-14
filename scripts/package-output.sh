@@ -41,15 +41,20 @@ find_one_apk() {
 
 runtime_apk=$(find_one_apk runtime 'netwatch-1.0.0-r1.apk')
 luci_apk=$(find_one_apk LuCI 'luci-app-netwatch-1.0.0-r1.apk')
+scheduled_backup_apk=$(find_one_apk 'Scheduled Backup LuCI' \
+	'luci-app-scheduled-backup-1.0.0-r1.apk')
 
 mkdir -p "$output_dir"
 runtime_output=$output_dir/netwatch_1.0.0-r1_all.apk
 luci_output=$output_dir/luci-app-netwatch_1.0.0-r1_all.apk
+scheduled_backup_output=$output_dir/luci-app-scheduled-backup_1.0.0-r1_x86_64.apk
 source_output=$output_dir/openwrt-netwatch-1.0.0-source.tar.gz
 checksums=$output_dir/SHA256SUMS
-rm -f "$runtime_output" "$luci_output" "$source_output" "$checksums"
+rm -f "$runtime_output" "$luci_output" "$scheduled_backup_output" \
+	"$source_output" "$checksums"
 cp "$runtime_apk" "$runtime_output"
 cp "$luci_apk" "$luci_output"
+cp "$scheduled_backup_apk" "$scheduled_backup_output"
 
 source_name=openwrt-netwatch-1.0.0
 archive=$tmp/$source_name.tar
@@ -63,6 +68,7 @@ mv "$archive.gz" "$source_output"
 	shasum -a 256 \
 		outputs/netwatch_1.0.0-r1_all.apk \
 		outputs/luci-app-netwatch_1.0.0-r1_all.apk \
+		outputs/luci-app-scheduled-backup_1.0.0-r1_x86_64.apk \
 		outputs/openwrt-netwatch-1.0.0-source.tar.gz \
 		> outputs/SHA256SUMS
 )
