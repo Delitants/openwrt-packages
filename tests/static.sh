@@ -119,6 +119,9 @@ if [ "$fail" -eq 0 ]; then
 
 	for text in \
 		'apk add luci-app-scheduled-backup' \
+		'apk upgrade luci-app-scheduled-backup' \
+		'1.0.0-r2' \
+		'/www/luci-static/resources/view/scheduled-backup.js' \
 		'System > Scheduled Backup' \
 		'local and SFTP destinations' \
 		'OpenWrt native restore'
@@ -128,6 +131,12 @@ if [ "$fail" -eq 0 ]; then
 			fail=1
 		fi
 	done
+
+	if ! grep -Fq 'outputs/luci-app-scheduled-backup_1.0.0-r2_all.apk' \
+		"$root/scripts/verify-artifacts.sh"; then
+		echo 'artifact verifier omits Scheduled Backup r2' >&2
+		fail=1
+	fi
 
 	for link in \
 		'[Netwatch](packages/netwatch/README.md)' \

@@ -34,7 +34,7 @@ openwrt-packages/
 |       |-- packages.adb
 |       |-- netwatch-1.0.0-r1.apk
 |       |-- luci-app-netwatch-1.0.0-r1.apk
-|       `-- luci-app-scheduled-backup-1.0.0-r1.apk
+|       `-- luci-app-scheduled-backup-1.0.0-r2.apk
 |-- keys/
 |   `-- netwatch-local.pem
 `-- scripts/
@@ -75,7 +75,7 @@ refuses to find or commit a private key implicitly.
 5. Commit and push the source and feed changes to `main`.
 
 The feed contains Netwatch `1.0.0-r1`, `luci-app-netwatch` `1.0.0-r1`, and
-`luci-app-scheduled-backup` `1.0.0-r1`.
+`luci-app-scheduled-backup` `1.0.0-r2`.
 
 ## Router Setup
 
