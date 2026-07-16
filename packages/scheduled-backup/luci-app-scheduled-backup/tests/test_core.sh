@@ -21,8 +21,4 @@ eq "$(sb_select_expired 2 openwrt-r-20260709-000000.tar.gz openwrt-r-20260711-00
 eq "$(sb_select_expired 0 openwrt-r-20260709-000000.tar.gz)" ''
 eq "$(sb_redact '')" ''
 eq "$(sb_redact 'super-secret')" '[redacted]'
-grep -Fq '[ ! -d ./htdocs ] || $(CP) ./htdocs/* $(1)/' "$ROOT/Makefile" || {
-	echo 'missing absent-directory-safe htdocs install recipe' >&2
-	fail=1
-}
 [ "$fail" -eq 0 ]

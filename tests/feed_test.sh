@@ -21,13 +21,18 @@ for path in \
 	keys/netwatch-local.pem \
 	feed/x86_64/netwatch-1.0.0-r1.apk \
 	feed/x86_64/luci-app-netwatch-1.0.0-r1.apk \
-	feed/x86_64/luci-app-scheduled-backup-1.0.0-r1.apk
+	feed/x86_64/luci-app-scheduled-backup-1.0.0-r2.apk
 do
 	[ -f "$root/$path" ] || {
 		echo "missing feed input: $path" >&2
 		exit 1
 	}
 done
+
+[ ! -e "$root/feed/x86_64/luci-app-scheduled-backup-1.0.0-r1.apk" ] || {
+	echo 'obsolete scheduled-backup r1 APK remains in feed' >&2
+	exit 1
+}
 
 grep -Fq 'mkndx' "$script"
 grep -Fq '"$apk" --allow-untrusted mkndx' "$script" || {
@@ -52,6 +57,10 @@ grep -Fq 'apk add luci-app-scheduled-backup' "$scheduled_readme" || {
 }
 grep -Fq 'System > Scheduled Backup' "$scheduled_readme" || {
 	echo 'README omits scheduled-backup LuCI location' >&2
+	exit 1
+}
+grep -Fq 'apk upgrade luci-app-scheduled-backup' "$scheduled_readme" || {
+	echo 'README omits scheduled-backup package-manager upgrade' >&2
 	exit 1
 }
 
