@@ -43,7 +43,6 @@ chmod +x "$tmp/bin/uci" "$tmp/bin/jsonfilter" "$tmp/bin/backend"
 
 [ -f "$ROOT/root/etc/uci-defaults/99-scheduled-backup-ucitrack" ]
 grep -Fq "config scheduled-backup '/etc/init.d/scheduled-backup reload'" "$ROOT/root/etc/uci-defaults/99-scheduled-backup-ucitrack"
-grep -Fq '$(INSTALL_CONF) ./root/etc/config/scheduled-backup $(1)/etc/config/scheduled-backup' "$ROOT/Makefile"
 
 printf '%s\n' 'MAILTO=root' '17 4 * * * /usr/bin/unrelated --flag' >"$tmp/crontab"
 cp "$tmp/crontab" "$tmp/unrelated"

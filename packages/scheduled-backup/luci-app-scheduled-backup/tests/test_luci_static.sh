@@ -43,4 +43,23 @@ key_dependencies=$(grep -Fc 'depends({ sftp_enabled: '\''1'\'', sftp_auth: '\''k
 
 ! grep -Eq "(password|private_key|key).*uci\.get|uci\.get.*(password|private_key|key)" "$VIEW"
 
+MAKEFILE=$ROOT/Makefile
+
+grep -Fq 'PKG_VERSION:=1.0.0' "$MAKEFILE"
+grep -Fq 'PKG_RELEASE:=2' "$MAKEFILE"
+grep -Fq 'LUCI_TITLE:=Scheduled configuration backups' "$MAKEFILE"
+grep -Fq 'LUCI_PKGARCH:=all' "$MAKEFILE"
+grep -Fq 'LUCI_DEPENDS:=' "$MAKEFILE"
+grep -Fq '+luci-base' "$MAKEFILE"
+grep -Fq '+rpcd-mod-file' "$MAKEFILE"
+grep -Fq 'include $(TOPDIR)/feeds/luci/luci.mk' "$MAKEFILE"
+grep -Fq 'define Package/$(PKG_NAME)/conffiles' "$MAKEFILE"
+grep -Fxq '/etc/config/scheduled-backup' "$MAKEFILE"
+grep -Fxq '/etc/scheduled-backup/' "$MAKEFILE"
+
+if grep -Fq '$(CP) ./htdocs/* $(1)/' "$MAKEFILE"; then
+	echo 'Scheduled Backup still installs htdocs at filesystem root' >&2
+	exit 1
+fi
+
 echo 'LuCI static contracts passed'
