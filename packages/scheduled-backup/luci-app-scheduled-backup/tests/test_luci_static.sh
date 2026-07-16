@@ -53,7 +53,7 @@ grep -Fq 'LUCI_DEPENDS:=' "$MAKEFILE"
 grep -Fq '+luci-base' "$MAKEFILE"
 grep -Fq '+rpcd-mod-file' "$MAKEFILE"
 grep -Fq 'include $(TOPDIR)/feeds/luci/luci.mk' "$MAKEFILE"
-grep -Fq 'define Package/$(PKG_NAME)/conffiles' "$MAKEFILE"
+grep -Fq 'define Package/luci-app-scheduled-backup/conffiles' "$MAKEFILE"
 grep -Fxq '/etc/config/scheduled-backup' "$MAKEFILE"
 grep -Fxq '/etc/scheduled-backup/' "$MAKEFILE"
 

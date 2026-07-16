@@ -9,7 +9,7 @@ LUCI_TITLE:=Scheduled configuration backups
 LUCI_DEPENDS:=+luci-base +rpcd +rpcd-mod-file +uci +lftp +openssh-client +openssh-client-utils +openssh-keygen
 LUCI_PKGARCH:=all
 
-define Package/$(PKG_NAME)/conffiles
+define Package/luci-app-scheduled-backup/conffiles
 /etc/config/scheduled-backup
 /etc/scheduled-backup/
 endef
