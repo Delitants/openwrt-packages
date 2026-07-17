@@ -21,7 +21,7 @@ for path in \
 	keys/netwatch-local.pem \
 	feed/x86_64/netwatch-1.0.0-r1.apk \
 	feed/x86_64/luci-app-netwatch-1.0.0-r1.apk \
-	feed/x86_64/luci-app-scheduled-backup-1.0.0-r2.apk
+	feed/x86_64/luci-app-scheduled-backup-1.0.0-r3.apk
 do
 	[ -f "$root/$path" ] || {
 		echo "missing feed input: $path" >&2
@@ -29,10 +29,15 @@ do
 	}
 done
 
-[ ! -e "$root/feed/x86_64/luci-app-scheduled-backup-1.0.0-r1.apk" ] || {
-	echo 'obsolete scheduled-backup r1 APK remains in feed' >&2
-	exit 1
-}
+for obsolete in \
+	feed/x86_64/luci-app-scheduled-backup-1.0.0-r1.apk \
+	feed/x86_64/luci-app-scheduled-backup-1.0.0-r2.apk
+do
+	[ ! -e "$root/$obsolete" ] || {
+		echo "obsolete Scheduled Backup APK remains in feed: $obsolete" >&2
+		exit 1
+	}
+done
 
 grep -Fq 'mkndx' "$script"
 grep -Fq '"$apk" --allow-untrusted mkndx' "$script" || {
