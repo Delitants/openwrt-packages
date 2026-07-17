@@ -14,6 +14,8 @@ var callSetPassword = rpc.declare({ object: 'scheduled-backup', method: 'set_pas
 var callClearPassword = rpc.declare({ object: 'scheduled-backup', method: 'clear_password' });
 var callSetKey = rpc.declare({ object: 'scheduled-backup', method: 'set_key', params: [ 'key' ] });
 var callClearKey = rpc.declare({ object: 'scheduled-backup', method: 'clear_key' });
+var nonnegativePattern = new RegExp('^[0-9]+$');
+var whitespacePattern = new RegExp('\\s+');
 
 function notify(result, success) {
 	if (result && result.ok === false)
@@ -54,7 +56,7 @@ function absolute(sectionId, value) {
 }
 
 function nonnegative(sectionId, value) {
-	return /^\d+$/.test(value || '') ? true : _('Must be a nonnegative integer');
+	return nonnegativePattern.test(value || '') ? true : _('Must be a nonnegative integer');
 }
 
 function requiredWhen(option, expected, message) {
@@ -76,13 +78,17 @@ function validateDestination(sectionId, value) {
 }
 
 function statusRow(label, value) {
-	return E('tr', {}, [ E('th', {}, label), E('td', {}, value || _('Not available')) ]);
+	return E('tr', { 'class': 'tr cbi-section-table-row' }, [
+		E('th', { 'class': 'th cbi-section-table-cell left' }, label),
+		E('td', { 'class': 'td cbi-section-table-cell left' },
+			value || _('Not available'))
+	]);
 }
 
 function renderStatus(node, status) {
 	status = status || {};
-	var size = status.size && /^\d+$/.test(status.size) ? '%1024.2mB'.format(+status.size) : status.size;
-	var table = E('table', { 'class': 'table' }, [
+	var size = status.size && nonnegativePattern.test(status.size) ? '%1024.2mB'.format(+status.size) : status.size;
+	var table = E('table', { 'class': 'table cbi-section-table' }, [
 		statusRow(_('State'), status.state),
 		statusRow(_('Started'), status.started),
 		statusRow(_('Finished'), status.finished),
@@ -195,8 +201,6 @@ return view.extend({
 		o.datatype = 'range(1,2147483647)';
 		o.depends('sftp_enabled', '1');
 
-		s = m.section(form.NamedSection, 'main', 'scheduled_backup', _('Credentials'));
-		s.addremove = false;
 		o = s.option(form.Value, '_password', _('Password (write-only)'));
 		o.password = true;
 		o.rmempty = true;
@@ -244,7 +248,7 @@ return view.extend({
 
 		s = m.section(form.NamedSection, 'main', 'scheduled_backup', _('Operations'));
 		s.addremove = false;
-		o = s.option(form.DummyValue, '_operations');
+		o = s.option(form.DummyValue, '_operations', _('Backup actions'));
 		o.renderWidget = function() {
 		return E('div', {}, [
 			actionButton(_('Run Now'), 'cbi-button-action', function() {
@@ -265,7 +269,9 @@ return view.extend({
 					ui.showModal(_('SFTP Test'), [ E('p', {}, _('Server fingerprints:')), E('pre', {}, fingerprints),
 						E('div', { 'class': 'right' }, [ actionButton(_('Close'), '', ui.hideModal), ' ',
 							actionButton(_('Trust Host'), 'cbi-button-action important', function() {
-								var fingerprint = fingerprints.split(/\s+/).filter(function(v) { return /^SHA256:/.test(v); })[0];
+								var fingerprint = fingerprints.split(whitespacePattern).filter(function(v) {
+									return v.indexOf('SHA256:') === 0;
+								})[0];
 								if (!fingerprint) return reportError(new Error(_('No host fingerprint was returned')));
 								ui.hideModal();
 								confirmAction(_('Trust Host'), _('Trust host fingerprint %s?').format(fingerprint), _('Trust Host'), function() {

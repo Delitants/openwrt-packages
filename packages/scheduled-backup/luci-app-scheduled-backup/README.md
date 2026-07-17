@@ -37,17 +37,21 @@ Treat every backup as sensitive: OpenWrt configuration archives can contain rout
 
 ## Upgrade
 
-Version `1.0.0-r2` corrects LuCI installation and cache handling. Upgrade from
-the existing signed feed with:
+Version `1.0.0-r3` corrects the LuCI form alignment and responsive Status
+layout. Upgrade from the existing signed feed with:
 
 ```sh
 apk update
 apk upgrade luci-app-scheduled-backup
 ```
 
-The corrected view is installed at
-`/www/luci-static/resources/view/scheduled-backup.js`. Log out of LuCI and back
-in if the browser session still has the pre-upgrade ACL set.
+The r3 page uses standard LuCI form and table classes, aligns **Run Now** and
+**Test SFTP** with the other controls, and keeps credential controls inside
+the SFTP section. Refresh LuCI after the upgrade. Log out and back in only if
+the existing browser session still has stale ACL state.
+
+The view remains installed at
+`/www/luci-static/resources/view/scheduled-backup.js`.
 
 Keep-settings upgrades preserve UCI configuration, SFTP credential files, the private key, and accepted host identity. Full package retention across firmware upgrades requires Attended Sysupgrade while this feed remains configured and reachable.
 

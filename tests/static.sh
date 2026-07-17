@@ -120,7 +120,7 @@ if [ "$fail" -eq 0 ]; then
 	for text in \
 		'apk add luci-app-scheduled-backup' \
 		'apk upgrade luci-app-scheduled-backup' \
-		'1.0.0-r2' \
+		'1.0.0-r3' \
 		'/www/luci-static/resources/view/scheduled-backup.js' \
 		'System > Scheduled Backup' \
 		'local and SFTP destinations' \
@@ -132,9 +132,9 @@ if [ "$fail" -eq 0 ]; then
 		fi
 	done
 
-	if ! grep -Fq 'outputs/luci-app-scheduled-backup_1.0.0-r2_all.apk' \
+	if ! grep -Fq 'outputs/luci-app-scheduled-backup_1.0.0-r3_all.apk' \
 		"$root/scripts/verify-artifacts.sh"; then
-		echo 'artifact verifier omits Scheduled Backup r2' >&2
+		echo 'artifact verifier omits Scheduled Backup r3' >&2
 		fail=1
 	fi
 

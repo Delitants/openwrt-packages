@@ -43,10 +43,42 @@ key_dependencies=$(grep -Fc 'depends({ sftp_enabled: '\''1'\'', sftp_auth: '\''k
 
 ! grep -Eq "(password|private_key|key).*uci\.get|uci\.get.*(password|private_key|key)" "$VIEW"
 
+for class in \
+	"'class': 'table cbi-section-table'" \
+	"'class': 'tr cbi-section-table-row'" \
+	"'class': 'th cbi-section-table-cell left'" \
+	"'class': 'td cbi-section-table-cell left'"
+do
+	grep -Fq "$class" "$VIEW" || {
+		echo "missing LuCI layout class: $class" >&2
+		exit 1
+	}
+done
+
+grep -Fq "s.option(form.DummyValue, '_operations', _('Backup actions'))" \
+	"$VIEW" || {
+	echo 'Operations are not aligned through a titled LuCI form row' >&2
+	exit 1
+}
+
+if grep -Fq "s = m.section(form.NamedSection, 'main', 'scheduled_backup', _('Credentials'));" \
+	"$VIEW"; then
+	echo 'Credentials still render as an independent section' >&2
+	exit 1
+fi
+
+sftp_line=$(grep -n "_('SFTP'));" "$VIEW" | head -1 | cut -d: -f1)
+password_line=$(grep -n "'_password'" "$VIEW" | head -1 | cut -d: -f1)
+operations_line=$(grep -n "_('Operations'));" "$VIEW" | head -1 | cut -d: -f1)
+[ "$sftp_line" -lt "$password_line" ] && [ "$password_line" -lt "$operations_line" ] || {
+	echo 'Credential widgets are not contained by the SFTP section' >&2
+	exit 1
+}
+
 MAKEFILE=$ROOT/Makefile
 
 grep -Fq 'PKG_VERSION:=1.0.0' "$MAKEFILE"
-grep -Fq 'PKG_RELEASE:=2' "$MAKEFILE"
+grep -Fq 'PKG_RELEASE:=3' "$MAKEFILE"
 grep -Fq 'LUCI_TITLE:=Scheduled configuration backups' "$MAKEFILE"
 grep -Fq 'LUCI_PKGARCH:=all' "$MAKEFILE"
 grep -Fq 'LUCI_DEPENDS:=' "$MAKEFILE"
