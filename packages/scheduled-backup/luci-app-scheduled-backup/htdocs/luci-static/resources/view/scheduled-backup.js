@@ -76,13 +76,17 @@ function validateDestination(sectionId, value) {
 }
 
 function statusRow(label, value) {
-	return E('tr', {}, [ E('th', {}, label), E('td', {}, value || _('Not available')) ]);
+	return E('tr', { 'class': 'tr cbi-section-table-row' }, [
+		E('th', { 'class': 'th cbi-section-table-cell left' }, label),
+		E('td', { 'class': 'td cbi-section-table-cell left' },
+			value || _('Not available'))
+	]);
 }
 
 function renderStatus(node, status) {
 	status = status || {};
 	var size = status.size && /^\d+$/.test(status.size) ? '%1024.2mB'.format(+status.size) : status.size;
-	var table = E('table', { 'class': 'table' }, [
+	var table = E('table', { 'class': 'table cbi-section-table' }, [
 		statusRow(_('State'), status.state),
 		statusRow(_('Started'), status.started),
 		statusRow(_('Finished'), status.finished),
@@ -195,8 +199,6 @@ return view.extend({
 		o.datatype = 'range(1,2147483647)';
 		o.depends('sftp_enabled', '1');
 
-		s = m.section(form.NamedSection, 'main', 'scheduled_backup', _('Credentials'));
-		s.addremove = false;
 		o = s.option(form.Value, '_password', _('Password (write-only)'));
 		o.password = true;
 		o.rmempty = true;
@@ -244,7 +246,7 @@ return view.extend({
 
 		s = m.section(form.NamedSection, 'main', 'scheduled_backup', _('Operations'));
 		s.addremove = false;
-		o = s.option(form.DummyValue, '_operations');
+		o = s.option(form.DummyValue, '_operations', _('Backup actions'));
 		o.renderWidget = function() {
 		return E('div', {}, [
 			actionButton(_('Run Now'), 'cbi-button-action', function() {
