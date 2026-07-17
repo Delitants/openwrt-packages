@@ -78,7 +78,7 @@ operations_line=$(grep -n "_('Operations'));" "$VIEW" | head -1 | cut -d: -f1)
 MAKEFILE=$ROOT/Makefile
 
 grep -Fq 'PKG_VERSION:=1.0.0' "$MAKEFILE"
-grep -Fq 'PKG_RELEASE:=2' "$MAKEFILE"
+grep -Fq 'PKG_RELEASE:=3' "$MAKEFILE"
 grep -Fq 'LUCI_TITLE:=Scheduled configuration backups' "$MAKEFILE"
 grep -Fq 'LUCI_PKGARCH:=all' "$MAKEFILE"
 grep -Fq 'LUCI_DEPENDS:=' "$MAKEFILE"

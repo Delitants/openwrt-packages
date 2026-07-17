@@ -10,7 +10,7 @@ cp "$root/scripts/package-output.sh" "$tmp/scripts/package-output.sh"
 cp "$root/README.md" "$tmp/README.md"
 printf 'runtime apk fixture\n' > "$tmp/work/sdk/bin/packages/base/netwatch-1.0.0-r1.apk"
 printf 'luci apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-netwatch-1.0.0-r1.apk"
-printf 'scheduled backup apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-scheduled-backup-1.0.0-r2.apk"
+printf 'scheduled backup apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-scheduled-backup-1.0.0-r3.apk"
 
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" init -q
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
@@ -30,11 +30,11 @@ git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
 	./scripts/package-output.sh >/dev/null
 )
 
-[ -f "$tmp/outputs/luci-app-scheduled-backup_1.0.0-r2_all.apk" ] || {
-	echo 'scheduled-backup r2 APK was not published to outputs' >&2
+[ -f "$tmp/outputs/luci-app-scheduled-backup_1.0.0-r3_all.apk" ] || {
+	echo 'scheduled-backup r3 APK was not published to outputs' >&2
 	exit 1
 }
-grep -Fq 'luci-app-scheduled-backup_1.0.0-r2_all.apk' \
+grep -Fq 'luci-app-scheduled-backup_1.0.0-r3_all.apk' \
 	"$tmp/outputs/SHA256SUMS"
 
 archive=$tmp/outputs/openwrt-netwatch-1.0.0-source.tar.gz

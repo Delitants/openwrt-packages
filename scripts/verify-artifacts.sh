@@ -4,7 +4,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 runtime=outputs/netwatch_1.0.0-r1_all.apk
 luci=outputs/luci-app-netwatch_1.0.0-r1_all.apk
-scheduled=outputs/luci-app-scheduled-backup_1.0.0-r2_all.apk
+scheduled=outputs/luci-app-scheduled-backup_1.0.0-r3_all.apk
 source_archive=outputs/openwrt-netwatch-1.0.0-source.tar.gz
 tmp=$(mktemp -d "$root/work/verify-artifacts.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
@@ -63,7 +63,7 @@ jq -e '
 
 jq -e '
 	.info.name == "luci-app-scheduled-backup" and
-	.info.version == "1.0.0-r2" and
+	.info.version == "1.0.0-r3" and
 	.info.arch == "noarch" and
 	(.info.depends | sort == [
 		"lftp", "libc", "luci-base", "openssh-client",
@@ -143,6 +143,19 @@ grep -Fxq '/etc/config/scheduled-backup' \
 	"$tmp/extracted/scheduled/lib/apk/packages/luci-app-scheduled-backup.conffiles"
 grep -Fxq '/etc/scheduled-backup/' \
 	"$tmp/extracted/scheduled/lib/apk/packages/luci-app-scheduled-backup.conffiles"
+
+scheduled_view="$tmp/extracted/scheduled/www/luci-static/resources/view/scheduled-backup.js"
+for class in \
+	'table cbi-section-table' \
+	'tr cbi-section-table-row' \
+	'th cbi-section-table-cell left' \
+	'td cbi-section-table-cell left'
+do
+	grep -Fq "$class" "$scheduled_view" || {
+		echo "error: built Scheduled Backup view lacks layout class: $class" >&2
+		exit 1
+	}
+done
 
 if find "$tmp/extracted" -type f -perm -022 -print | grep -q .; then
 	echo 'error: group- or world-writable file found in APK contents' >&2
