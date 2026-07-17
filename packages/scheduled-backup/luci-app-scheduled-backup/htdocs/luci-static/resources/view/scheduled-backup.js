@@ -14,6 +14,8 @@ var callSetPassword = rpc.declare({ object: 'scheduled-backup', method: 'set_pas
 var callClearPassword = rpc.declare({ object: 'scheduled-backup', method: 'clear_password' });
 var callSetKey = rpc.declare({ object: 'scheduled-backup', method: 'set_key', params: [ 'key' ] });
 var callClearKey = rpc.declare({ object: 'scheduled-backup', method: 'clear_key' });
+var nonnegativePattern = new RegExp('^[0-9]+$');
+var whitespacePattern = new RegExp('\\s+');
 
 function notify(result, success) {
 	if (result && result.ok === false)
@@ -54,7 +56,7 @@ function absolute(sectionId, value) {
 }
 
 function nonnegative(sectionId, value) {
-	return /^\d+$/.test(value || '') ? true : _('Must be a nonnegative integer');
+	return nonnegativePattern.test(value || '') ? true : _('Must be a nonnegative integer');
 }
 
 function requiredWhen(option, expected, message) {
@@ -85,7 +87,7 @@ function statusRow(label, value) {
 
 function renderStatus(node, status) {
 	status = status || {};
-	var size = status.size && /^\d+$/.test(status.size) ? '%1024.2mB'.format(+status.size) : status.size;
+	var size = status.size && nonnegativePattern.test(status.size) ? '%1024.2mB'.format(+status.size) : status.size;
 	var table = E('table', { 'class': 'table cbi-section-table' }, [
 		statusRow(_('State'), status.state),
 		statusRow(_('Started'), status.started),
@@ -267,7 +269,9 @@ return view.extend({
 					ui.showModal(_('SFTP Test'), [ E('p', {}, _('Server fingerprints:')), E('pre', {}, fingerprints),
 						E('div', { 'class': 'right' }, [ actionButton(_('Close'), '', ui.hideModal), ' ',
 							actionButton(_('Trust Host'), 'cbi-button-action important', function() {
-								var fingerprint = fingerprints.split(/\s+/).filter(function(v) { return /^SHA256:/.test(v); })[0];
+								var fingerprint = fingerprints.split(whitespacePattern).filter(function(v) {
+									return v.indexOf('SHA256:') === 0;
+								})[0];
 								if (!fingerprint) return reportError(new Error(_('No host fingerprint was returned')));
 								ui.hideModal();
 								confirmAction(_('Trust Host'), _('Trust host fingerprint %s?').format(fingerprint), _('Trust Host'), function() {

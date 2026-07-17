@@ -145,6 +145,12 @@ grep -Fxq '/etc/scheduled-backup/' \
 	"$tmp/extracted/scheduled/lib/apk/packages/luci-app-scheduled-backup.conffiles"
 
 scheduled_view="$tmp/extracted/scheduled/www/luci-static/resources/view/scheduled-backup.js"
+if find "$tmp/extracted/scheduled/www/luci-static/resources" -type f -name '*.js.o' \
+	-print | grep -q .; then
+	echo 'error: failed LuCI minifier output found in Scheduled Backup APK' >&2
+	exit 1
+fi
+
 for class in \
 	'table cbi-section-table' \
 	'tr cbi-section-table-row' \
