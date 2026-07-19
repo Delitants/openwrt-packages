@@ -281,3 +281,65 @@ truthy(match(interface_recovery, /Recovered state: wireless AP is running/),
 	'fresh recovery snapshot rendered');
 equal(match(interface_recovery, /Recent relevant logs/), null,
 	'failure diagnostics omitted from recovery');
+
+let tainted_message_result = {
+	...interface_context.state.last_result,
+	evidence: {
+		radio: 'radio0', present: false, secret: 'message-evidence-secret',
+		nested: { password: 'message-nested-secret' },
+		ssid: 'office\nmessage-control-secret'
+	},
+	diagnostic: { text: 'message-result-diagnostic-secret' },
+	raw_snapshot: { password: 'message-snapshot-secret' },
+	smtp: { password: 'message-smtp-secret' },
+	config: { password: 'message-config-secret' },
+	secret: 'message-top-secret'
+};
+let tainted_failure_message = render_message('failure', {
+	...interface_context,
+	state: { ...interface_context.state, last_result: tainted_message_result }
+});
+for (let secret in [
+	'message-evidence-secret', 'message-nested-secret', 'message-control-secret',
+	'message-result-diagnostic-secret', 'message-snapshot-secret',
+	'message-smtp-secret', 'message-config-secret', 'message-top-secret'
+])
+	equal(length(split(tainted_failure_message, secret)), 1,
+		`${secret} absent from failure mail`);
+truthy(length(split(tainted_failure_message,
+	'Evidence: { "radio": "radio0", "present": false }')) == 2,
+	'allowed evidence remains in failure mail');
+
+let tainted_recovery_message = render_message('recovery', {
+	...interface_context,
+	diagnostic: { text: 'message-context-diagnostic-secret' },
+	state: { recovery_pending: {
+		incident_started: 1700000000, recovered_at: 1700000120, failure_emails: 2,
+		last_result: tainted_message_result,
+		recovered_result: {
+			ok: true, selector: 'wifi-iface:office', kind: 'wifi-iface',
+			label: 'AP: Office WiFi — radio0 / office', live_device: 'phy0-ap0',
+			summary: 'wireless AP is running', evidence: {
+				present: true, secret: 'recovery-message-evidence-secret',
+				nested: { password: 'recovery-message-nested-secret' }
+			},
+			diagnostic: { text: 'recovery-message-result-diagnostic-secret' },
+			config: { password: 'recovery-message-config-secret' },
+			secret: 'recovery-message-top-secret'
+		}
+	} }
+});
+for (let secret in [
+	'message-context-diagnostic-secret', 'recovery-message-evidence-secret',
+	'recovery-message-nested-secret', 'recovery-message-result-diagnostic-secret',
+	'recovery-message-config-secret', 'recovery-message-top-secret'
+])
+	equal(length(split(tainted_recovery_message, secret)), 1,
+		`${secret} absent from recovery mail`);
+
+let oversized_diagnostic = '';
+for (let i = 0; i < 65537; i++) oversized_diagnostic += 'x';
+rejected(() => render_message('failure', {
+	...interface_context,
+	diagnostic: { text: oversized_diagnostic }
+}), 'oversized diagnostic body rejected');

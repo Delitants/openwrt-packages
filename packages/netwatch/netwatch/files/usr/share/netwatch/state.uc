@@ -1,3 +1,5 @@
+import { compact_result } from 'result';
+
 export function new_state(id) {
 	return {
 		id,
@@ -40,21 +42,22 @@ export function apply_result(state, monitor, result, now) {
 	}
 
 	let previous_status = state.status;
+	let compact = compact_result(result);
 
-	if (result.ok) {
+	if (compact?.ok === true) {
 		if (previous_status == 'failed' && state.recovery_eligible &&
 			monitor.recovery_email) {
 			state.recovery_pending = {
 				incident_started: state.incident_started,
 				recovered_at: now,
 				failure_emails: state.failure_emails,
-				last_result: state.last_result,
-				recovered_result: result
+				last_result: compact_result(state.last_result),
+				recovered_result: compact
 			};
 		}
 
 		state.last_check = now;
-		state.last_result = result;
+		state.last_result = compact;
 		set_status(state, 'healthy', now);
 		clear_active_incident(state);
 
@@ -65,7 +68,7 @@ export function apply_result(state, monitor, result, now) {
 	}
 
 	state.last_check = now;
-	state.last_result = result;
+	state.last_result = compact;
 	state.consecutive_failures++;
 
 	if (previous_status == 'failed')

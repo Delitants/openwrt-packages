@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { compact_result } from 'result';
 
 const STATUS_TEMP = '/var/run/netwatch/status.json.tmp';
 const STATUS_FILE = '/var/run/netwatch/status.json';
@@ -14,7 +15,7 @@ export function public_status(daemon_started, last_reload, mail_error, states) {
 			status: s.status,
 			last_check: s.last_check,
 			last_transition: s.last_transition,
-			last_result: s.last_result,
+			last_result: compact_result(s.last_result),
 			consecutive_failures: s.consecutive_failures,
 			incident_started: s.incident_started,
 			failure_emails: s.failure_emails,

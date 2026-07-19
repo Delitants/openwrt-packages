@@ -1,3 +1,5 @@
+import { compact_result_with_evidence } from 'result';
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = [
 	'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -260,15 +262,15 @@ export function render_msmtp(smtp) {
 };
 
 function safe_body_block(value, field) {
-	let disallowed_controls = type(value) == 'string'
-		? replace(value, /[\t\n]/g, '') : '';
-	if (type(value) != 'string' || length(value) > 65536 ||
-		match(disallowed_controls, /[[:cntrl:]]/))
+	if (type(value) != 'string' || length(value) > 65536)
+		die(`${field} contains invalid characters`);
+	let disallowed_controls = replace(value, /[\t\n]/g, '');
+	if (match(disallowed_controls, /[[:cntrl:]]/))
 		die(`${field} contains invalid characters`);
 	return value;
 };
 
-function interface_identity_lines(result) {
+function interface_identity_lines(result, evidence_json) {
 	if (type(result) != 'object') die('interface result is required');
 	let lines = [
 		`Interface: ${safe_text(result.label ?? result.configured_name, 'interface label', false)}`,
@@ -280,7 +282,7 @@ function interface_identity_lines(result) {
 	if (type(result.summary) == 'string' && result.summary != '')
 		push(lines, `Summary: ${safe_text(result.summary, 'interface summary', false)}`);
 	if (type(result.evidence) == 'object')
-		push(lines, `Evidence: ${sprintf('%J', result.evidence)}`);
+		push(lines, `Evidence: ${evidence_json}`);
 	return lines;
 };
 
@@ -312,10 +314,12 @@ export function render_message(kind, context) {
 	let duration;
 	let body;
 	let subject;
+	let compacted;
 
 	if (kind == 'failure') {
 		incident = integer(state.incident_started, 'incident time');
-		result = state.last_result;
+		compacted = compact_result_with_evidence(state.last_result);
+		result = compacted.value;
 
 		if (type(result) != 'object')
 			die('failure result is required');
@@ -330,7 +334,7 @@ export function render_message(kind, context) {
 			subject = `[Netwatch DOWN][${hostname}] ${name} — ${label}`;
 			body = [
 				`Monitor: ${name}`,
-				...interface_identity_lines(result),
+				...interface_identity_lines(result, compacted.evidence_json),
 				`Reason: ${safe_text(result.reason, 'failure reason', false)}`,
 				`Last check: ${rfc5322_date(integer(state.last_check, 'last check'))}`,
 				`Incident time: ${rfc5322_date(incident)}`,
@@ -367,13 +371,14 @@ export function render_message(kind, context) {
 
 		duration = recovered_at - incident;
 		if (is_interface) {
-			let recovered = pending.recovered_result;
+			compacted = compact_result_with_evidence(pending.recovered_result);
+			let recovered = compacted.value;
 			let label = safe_text(recovered?.label ?? recovered?.configured_name,
 				'interface label', false);
 			subject = `[Netwatch RECOVERED][${hostname}] ${name} — ${label}`;
 			body = [
 				`Monitor: ${name}`,
-				...interface_identity_lines(recovered),
+				...interface_identity_lines(recovered, compacted.evidence_json),
 				`Recovered state: ${safe_text(recovered.summary, 'recovery summary', false)}`,
 				`Incident time: ${rfc5322_date(incident)}`,
 				`Recovered at: ${rfc5322_date(recovered_at)}`,

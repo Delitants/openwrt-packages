@@ -96,3 +96,96 @@ equal(apply_result(interface_state, interface_monitor, recovered_interface, 160)
 equal(interface_state.last_transition, 160, 'recovery transition time recorded');
 deep_equal(interface_state.recovery_pending.recovered_result, recovered_interface,
 	'fresh recovery result retained for concise recovery email');
+
+let transitions = new_state('transition-matrix');
+let transition_monitor = { enabled: true, failures: 3, recovery_email: true };
+equal(apply_result(transitions, transition_monitor, good, 1100), 'became_healthy',
+	'unknown becomes healthy');
+equal(transitions.last_transition, 1100, 'unknown to healthy records transition');
+equal(apply_result(transitions, transition_monitor, good, 1110), 'healthy',
+	'healthy remains healthy');
+equal(transitions.last_transition, 1100, 'unchanged healthy preserves transition');
+equal(apply_result(transitions, transition_monitor, bad, 1120), 'pending',
+	'healthy becomes pending');
+equal(transitions.last_transition, 1120, 'healthy to pending records transition');
+equal(apply_result(transitions, transition_monitor, bad, 1130), 'pending',
+	'pending remains pending');
+equal(transitions.last_transition, 1120, 'unchanged pending preserves transition');
+equal(apply_result(transitions, transition_monitor, bad, 1140), 'opened',
+	'pending becomes failed');
+equal(transitions.last_transition, 1140, 'pending to failed records transition');
+equal(apply_result(transitions, transition_monitor, bad, 1150), 'failed',
+	'failed remains failed');
+equal(transitions.last_transition, 1140, 'unchanged failed preserves transition');
+equal(apply_result(transitions, transition_monitor, good, 1160), 'recovered',
+	'failed becomes healthy');
+equal(transitions.last_transition, 1160, 'failed to healthy records transition');
+equal(apply_result(transitions, { ...transition_monitor, enabled: false }, null, 1170),
+	'disabled', 'healthy becomes disabled');
+equal(transitions.last_transition, 1170, 'disable records transition');
+equal(apply_result(transitions, { ...transition_monitor, enabled: false }, null, 1180),
+	'disabled', 'disabled remains disabled');
+equal(transitions.last_transition, 1170, 'unchanged disabled preserves transition');
+equal(apply_result(transitions, transition_monitor, good, 1190), 'became_healthy',
+	'disabled monitor re-enables healthy');
+equal(transitions.last_transition, 1190, 're-enable records transition');
+
+let tainted_interface = new_state('tainted-interface');
+let tainted_failure = {
+	ok: false, reason: 'wireless_ap_down', summary: 'wireless AP is not running',
+	selector: 'wifi-iface:office', kind: 'wifi-iface', configured_name: 'office',
+	label: 'AP: Office', live_device: 'phy0-ap0', observed_at: 1200,
+	evidence: {
+		radio: 'radio0', present: false, secret: 'failure-evidence-secret',
+		nested: { password: 'failure-nested-secret' }, list: [ 'failure-array-secret' ],
+		ssid: 'office\ncontrol-secret'
+	},
+	diagnostic: { text: 'failure-diagnostic-secret' },
+	raw_snapshot: { password: 'failure-snapshot-secret' },
+	smtp: { password: 'failure-smtp-secret' },
+	config: { password: 'failure-config-secret' },
+	secret: 'failure-top-secret'
+};
+equal(apply_result(tainted_interface, immediate, tainted_failure, 1200), 'opened',
+	'tainted interface failure opens');
+let retained_failure = sprintf('%J', tainted_interface.last_result);
+for (let secret in [
+	'failure-evidence-secret', 'failure-nested-secret', 'failure-array-secret',
+	'control-secret', 'failure-diagnostic-secret', 'failure-snapshot-secret',
+	'failure-smtp-secret', 'failure-config-secret', 'failure-top-secret'
+])
+	equal(length(split(retained_failure, secret)), 1,
+		`${secret} absent from retained failure`);
+
+tainted_interface.recovery_eligible = true;
+let tainted_recovery = {
+	...recovered_interface, summary: 'wireless AP is running', kind: 'wifi-iface',
+	configured_name: 'office', observed_at: 1260,
+	evidence: {
+		present: true, secret: 'recovery-evidence-secret',
+		nested: { password: 'recovery-nested-secret' }
+	},
+	diagnostic: { text: 'recovery-diagnostic-secret' },
+	raw_snapshot: { password: 'recovery-snapshot-secret' },
+	config: { password: 'recovery-config-secret' },
+	secret: 'recovery-top-secret'
+};
+equal(apply_result(tainted_interface, immediate, tainted_recovery, 1260), 'recovered',
+	'tainted interface incident recovers');
+let retained_recovery = sprintf('%J', tainted_interface.recovery_pending);
+for (let secret in [
+	'failure-evidence-secret', 'failure-diagnostic-secret', 'failure-snapshot-secret',
+	'recovery-evidence-secret', 'recovery-nested-secret', 'recovery-diagnostic-secret',
+	'recovery-snapshot-secret', 'recovery-config-secret', 'recovery-top-secret'
+])
+	equal(length(split(retained_recovery, secret)), 1,
+		`${secret} absent from recovery state`);
+
+let oversized_interface = new_state('oversized-interface');
+let oversized_ssid = '';
+for (let i = 0; i < 5000; i++) oversized_ssid += 'x';
+equal(apply_result(oversized_interface, immediate, {
+	...tainted_failure, evidence: { ssid: oversized_ssid }
+}, 1300), 'opened', 'oversized evidence failure opens');
+deep_equal(oversized_interface.last_result.evidence, {},
+	'oversized evidence dropped before state retention');
