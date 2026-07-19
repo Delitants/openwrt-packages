@@ -142,9 +142,13 @@ export function normalize_monitor(id, raw) {
 
 	let errors = [];
 	let monitor_id = plain_monitor_string({ id }, 'id', '', errors);
-	let target = plain_monitor_string(raw, 'target', '', errors);
 	let monitor_type = plain_monitor_string(raw, 'type', '', errors);
-	let interface_selector = plain_monitor_string(raw, 'interface_selector', '', errors);
+	let target = monitor_type in ['ping', 'tcp']
+		? plain_monitor_string(raw, 'target', '', errors)
+		: '';
+	let interface_selector = monitor_type == 'interface'
+		? plain_monitor_string(raw, 'interface_selector', '', errors)
+		: '';
 	let repeat_interval = raw.repeat_interval == null || raw.repeat_interval == ''
 		? 0
 		: plain_integer(raw.repeat_interval);
@@ -167,8 +171,8 @@ export function normalize_monitor(id, raw) {
 		id: monitor_id,
 		enabled: monitor_bool(raw, 'enabled', true, errors),
 		name: plain_monitor_string(raw, 'name', monitor_id, errors),
-		target: monitor_type == 'interface' ? '' : target,
-		interface_selector: monitor_type == 'interface' ? interface_selector : '',
+		target,
+		interface_selector,
 		type: monitor_type,
 		interval: normalized_integer(raw.interval, 'interval', LIMITS.interval, errors),
 		timeout: normalized_integer(raw.timeout, 'timeout', LIMITS.timeout, errors),

@@ -108,3 +108,26 @@ equal(normalize_monitor('ping', { type: 'ping', target: 'router.example' }).ok, 
 	'ping compatibility retained');
 equal(normalize_monitor('tcp', { type: 'tcp', target: 'router.example', port: '443' }).ok, true,
 	'TCP compatibility retained');
+
+let interface_with_nonstring_target = normalize_monitor('wireless', {
+	type: 'interface', interface_selector: 'wifi-iface:guest_5g', target: 1
+});
+truthy(interface_with_nonstring_target.ok, 'interface ignores non-string target');
+equal(interface_with_nonstring_target.value.target, '', 'irrelevant interface target normalized');
+
+let interface_with_newline_target = normalize_monitor('wireless-newline', {
+	type: 'interface', interface_selector: 'wifi-iface:guest_5g', target: 'unsafe\ntarget'
+});
+truthy(interface_with_newline_target.ok, 'interface ignores newline target');
+
+let ping_with_nonstring_selector = normalize_monitor('ping-selector', {
+	type: 'ping', target: 'router.example', interface_selector: 1
+});
+truthy(ping_with_nonstring_selector.ok, 'ping ignores non-string interface selector');
+equal(ping_with_nonstring_selector.value.interface_selector, '', 'irrelevant ping selector normalized');
+
+let tcp_with_newline_selector = normalize_monitor('tcp-selector', {
+	type: 'tcp', target: 'router.example', port: '443', interface_selector: 'unsafe\nselector'
+});
+truthy(tcp_with_newline_selector.ok, 'TCP ignores newline interface selector');
+equal(tcp_with_newline_selector.value.interface_selector, '', 'irrelevant TCP selector normalized');
