@@ -14,6 +14,25 @@ function probe_result(ok, reason, detail) {
 	};
 };
 
+function interface_probe_failure(monitor, summary) {
+	let parsed = match(monitor.interface_selector,
+		/^(network|device|wifi-radio|wifi-iface):([A-Za-z0-9_][A-Za-z0-9_.-]*)$/);
+	let configured_name = parsed?.[2] ?? null;
+
+	return {
+		ok: false,
+		reason: 'status_unavailable',
+		summary,
+		selector: monitor.interface_selector,
+		kind: parsed?.[1] ?? null,
+		configured_name,
+		label: configured_name ?? monitor.interface_selector,
+		live_device: null,
+		observed_at: time(),
+		evidence: {}
+	};
+};
+
 function safe_target(target) {
 	return type(target) == 'string' &&
 		substr(target, 0, 1) != '-' &&
@@ -145,9 +164,10 @@ export function start_probe_with(monitor, callback, dependencies) {
 				return dependencies.interface(monitor);
 			}
 			catch (error) {
+				if (monitor.type == 'interface')
+					return interface_probe_failure(monitor, 'interface probe failed');
 				return probe_result(false,
-					monitor.type == 'tcp' ? 'connect_failed' :
-						monitor.type == 'interface' ? 'status_unavailable' : 'probe_failed',
+					monitor.type == 'tcp' ? 'connect_failed' : 'probe_failed',
 					'probe failed');
 			}
 		},
@@ -169,7 +189,9 @@ export function start_probe_with(monitor, callback, dependencies) {
 		if (!task_handle.finished())
 			task_handle.kill();
 
-		finish(probe_result(false, 'timeout', 'probe timed out'));
+		finish(monitor.type == 'interface'
+			? interface_probe_failure(monitor, 'interface probe timed out')
+			: probe_result(false, 'timeout', 'probe timed out'));
 	});
 
 	if (!timeout_handle) {

@@ -1,4 +1,4 @@
-import { equal } from 'test';
+import { deep_equal, equal } from 'test';
 import {
 	ping_timeout_ms,
 	ping_command,
@@ -90,6 +90,7 @@ let fake_uloop = {
 };
 let callback_count = 0;
 let callback_reason = null;
+let callback_result = null;
 let dependencies = {
 	fs: fake_fs,
 	socket: fake_socket,
@@ -165,3 +166,63 @@ equal(callback_count, 1, 'interface result calls parent exactly once');
 equal(callback_reason, 'carrier_lost', 'interface result is preserved');
 timeout_callback();
 equal(callback_count, 1, 'late interface timeout cannot call parent again');
+
+function assert_interface_unavailable(value, summary, label) {
+	equal(value.ok, false, `${label} is failed`);
+	equal(value.reason, 'status_unavailable', `${label} uses public interface reason`);
+	equal(value.summary, summary, `${label} has safe summary`);
+	equal(value.selector, 'device:eth0', `${label} preserves selector`);
+	equal(value.kind, 'device', `${label} preserves kind`);
+	equal(value.configured_name, 'eth0', `${label} preserves configured name`);
+	equal(value.live_device, null, `${label} has no invented live device`);
+	equal(type(value.observed_at), 'int', `${label} has observation time`);
+	deep_equal(value.evidence, {}, `${label} has bounded empty evidence`);
+};
+
+task_function = null;
+output_callback = null;
+timeout_callback = null;
+scheduled_timeout = null;
+timer_cancels = 0;
+task_kills = 0;
+task_finished = false;
+callback_count = 0;
+callback_reason = null;
+callback_result = null;
+dependencies.interface = () => die('interface probe failed');
+equal(start_probe_with(interface_monitor, (probe_result) => {
+	callback_count++;
+	callback_result = probe_result;
+}, dependencies), true, 'throwing interface probe starts');
+task_result = task_function({});
+task_finished = true;
+output_callback(task_result);
+equal(callback_count, 1, 'thrown interface worker calls parent once');
+assert_interface_unavailable(callback_result, 'interface probe failed',
+	'thrown interface worker');
+timeout_callback();
+equal(callback_count, 1, 'late timeout after interface exception is ignored');
+
+task_function = null;
+output_callback = null;
+timeout_callback = null;
+scheduled_timeout = null;
+timer_cancels = 0;
+task_kills = 0;
+task_finished = false;
+callback_count = 0;
+callback_reason = null;
+callback_result = null;
+dependencies.interface = () => ({ ok: true, reason: null });
+equal(start_probe_with(interface_monitor, (probe_result) => {
+	callback_count++;
+	callback_result = probe_result;
+}, dependencies), true, 'timed interface probe starts');
+timeout_callback();
+equal(task_kills, 1, 'interface timeout kills unfinished task');
+equal(callback_count, 1, 'interface timeout calls parent once');
+assert_interface_unavailable(callback_result, 'interface probe timed out',
+	'interface timeout');
+task_result = task_function({});
+output_callback(task_result);
+equal(callback_count, 1, 'late interface worker result after timeout is ignored');

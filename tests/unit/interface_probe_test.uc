@@ -71,6 +71,13 @@ equal(result('device:eth0', { ...base, runtime: { ...base.runtime,
 equal(result('device:eth0', { ...base, sources: { ...base.sources,
 	device_runtime: false, sysfs_devices: false } }).reason,
 	'status_unavailable', 'partial device data from failed sources is not trusted');
+equal(result('device:eth0', { ...base, runtime: { ...base.runtime,
+	devices: { eth0: { present: true, up: true, carrier: true, operstate: 'up' } },
+	sys_devices: [] }, sources: { ...base.sources, device_runtime: false } }).reason,
+	'interface_absent', 'failed device runtime cannot override confirmed sysfs absence');
+equal(result('device:eth0', { ...base, runtime: { ...base.runtime,
+	devices: { eth0: { present: true, up: false, carrier: true, operstate: 'up' } } } }).reason,
+	'status_unavailable', 'contradictory Linux up state is indeterminate');
 
 equal(result('network:wan', { ...base,
 	sources: { ...base.sources, logical_runtime: false } }).reason,
@@ -88,10 +95,20 @@ equal(result('wifi-radio:radio0', { ...base, runtime: { ...base.runtime,
 	wireless: { radio0: { pending: false, disabled: false,
 		retry_setup_failed: false, interfaces: [] } } } }).reason,
 	'status_unavailable', 'missing required radio state is indeterminate');
+equal(result('wifi-radio:radio0', { ...base, configured: { ...base.configured,
+	radios: [] }, runtime: { ...base.runtime,
+	wireless: { radio0: { up: false, pending: false, disabled: false,
+		retry_setup_failed: true, interfaces: [] } } } }).reason,
+	'wireless_initialization_failed', 'radio initialization failure precedes missing configuration');
 equal(result('wifi-iface:office', { ...base, runtime: { ...base.runtime,
 	wireless: { radio0: { up: false, pending: false, disabled: false,
 		retry_setup_failed: true, interfaces: [] } } } }).reason,
 	'wireless_initialization_failed', 'AP initialization failure precedes missing BSS');
+equal(result('wifi-iface:office', { ...base, configured: { ...base.configured,
+	radios: [] }, runtime: { ...base.runtime,
+	wireless: { radio0: { up: false, pending: false, disabled: false,
+		retry_setup_failed: true, interfaces: [] } } } }).reason,
+	'wireless_initialization_failed', 'AP initialization failure precedes missing parent configuration');
 equal(result('wifi-iface:office', { ...base,
 	sources: { ...base.sources, wireless_aps: false } }).reason,
 	'status_unavailable', 'failed AP configuration source cannot invent health');
@@ -102,6 +119,16 @@ equal(result('wifi-iface:office', { ...base, runtime: { ...base.runtime,
 equal(result('wifi-iface:office', { ...base, sources: { ...base.sources,
 	device_runtime: false, sysfs_devices: false } }).reason,
 	'status_unavailable', 'partial AP device data from failed sources is not trusted');
+equal(result('wifi-iface:office', { ...base, runtime: { ...base.runtime,
+	devices: { ...base.runtime.devices,
+		'phy0-ap0': { present: true, up: true, carrier: true, operstate: 'up' } },
+	sys_devices: [ 'eth0' ] }, sources: { ...base.sources, device_runtime: false } }).reason,
+	'wireless_ap_down', 'failed device runtime cannot override confirmed AP sysfs absence');
+equal(result('wifi-iface:office', { ...base, runtime: { ...base.runtime,
+	devices: { ...base.runtime.devices,
+		'phy0-ap0': { present: false, up: true, carrier: true, operstate: 'up' } },
+	sys_devices: [ 'eth0', 'phy0-ap0' ] }, sources: { ...base.sources, sysfs_devices: false } }).reason,
+	'wireless_ap_down', 'failed sysfs data cannot override confirmed AP runtime absence');
 equal(result('wifi-iface:office', { ...base, runtime: { ...base.runtime,
 	devices: { eth0: base.runtime.devices.eth0 }, sys_devices: [ 'eth0' ] } }).reason,
 	'wireless_ap_down', 'confirmed AP live device disappearance detected');

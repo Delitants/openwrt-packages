@@ -44,18 +44,29 @@ function operstate_down(value) {
 	return value in [ 'down', 'lowerlayerdown', 'notpresent' ];
 };
 
-function device_presence(snapshot, name) {
+function device_facts(snapshot, name) {
 	let runtime = snapshot?.runtime?.devices?.[name];
 	let sys_devices = snapshot?.runtime?.sys_devices ?? [];
 	let device_available = source_available(snapshot, 'device_runtime');
 	let sysfs_available = source_available(snapshot, 'sysfs_devices');
+	let runtime_present = device_available
+		? runtime == null ? false : runtime.present === true ? true :
+			runtime.present === false ? false : null
+		: null;
+	let sysfs_present = sysfs_available ? name in sys_devices : null;
+	let present = runtime_present != null && sysfs_present != null &&
+		runtime_present != sysfs_present ? null :
+		runtime_present === true || sysfs_present === true ? true :
+		runtime_present === false || sysfs_present === false ? false : null;
+	let sysfs_state = sysfs_available && sysfs_present === true;
 
-	if (!device_available && !sysfs_available) return null;
-	if (name in sys_devices || runtime?.present === true) return true;
-	if (runtime?.present === false) return false;
-	if (sysfs_available) return false;
-	if (device_available && runtime == null) return false;
-	return null;
+	return {
+		present,
+		up: device_available ? runtime?.up ?? null : null,
+		carrier: sysfs_state || device_available ? runtime?.carrier ?? null : null,
+		operstate: sysfs_state || device_available ? runtime?.operstate ?? null : null,
+		mtu: sysfs_state || device_available ? runtime?.mtu ?? null : null
+	};
 };
 
 function invalid_answer(selector, observed_at) {
@@ -121,19 +132,18 @@ export function evaluate_interface(selector, snapshot, observed_at) {
 
 	if (parsed.kind == 'device') {
 		let config = configured(snapshot, 'devices', 'name', parsed.id);
-		let runtime = snapshot?.runtime?.devices?.[parsed.id];
-		let present = device_presence(snapshot, parsed.id);
+		let facts = device_facts(snapshot, parsed.id);
 		let candidate = {
 			configured_name: parsed.id,
 			label: parsed.id,
-			live_device: present === true ? parsed.id : null
+			live_device: facts.present === true ? parsed.id : null
 		};
 		let evidence = {
-			present,
-			up: runtime?.up ?? null,
-			carrier: runtime?.carrier ?? null,
-			operstate: runtime?.operstate ?? null,
-			mtu: runtime?.mtu ?? null
+			present: facts.present,
+			up: facts.up,
+			carrier: facts.carrier,
+			operstate: facts.operstate,
+			mtu: facts.mtu
 		};
 
 		if (config?.disabled === true)
@@ -142,20 +152,23 @@ export function evaluate_interface(selector, snapshot, observed_at) {
 		if (!source_available(snapshot, 'network_devices'))
 			return answer(false, 'status_unavailable',
 				'device configuration state is unavailable', parsed, candidate, observed_at, evidence);
-		if (present == null)
+		if (facts.present == null)
 			return answer(false, 'status_unavailable',
 				'device presence is indeterminate', parsed, candidate, observed_at, evidence);
-		if (present === false)
+		if (facts.present === false)
 			return answer(false, 'interface_absent',
 				'device is not present', parsed, candidate, observed_at, evidence);
-		if (operstate_down(runtime?.operstate) ||
-			(runtime?.up === false && runtime?.operstate != 'up'))
+		if ((facts.up === false && facts.operstate == 'up') ||
+			(facts.up === true && operstate_down(facts.operstate)))
+			return answer(false, 'status_unavailable',
+				'device operational state is contradictory', parsed, candidate, observed_at, evidence);
+		if (operstate_down(facts.operstate) || facts.up === false)
 			return answer(false, 'link_down',
 				'device is not operationally up', parsed, candidate, observed_at, evidence);
-		if (runtime?.carrier === false)
+		if (facts.carrier === false)
 			return answer(false, 'carrier_lost',
 				'device reports no carrier', parsed, candidate, observed_at, evidence);
-		if (runtime?.up !== true && runtime?.operstate != 'up')
+		if (facts.up !== true && facts.operstate != 'up')
 			return answer(false, 'status_unavailable',
 				'device operational state is indeterminate', parsed, candidate, observed_at, evidence);
 		return answer(true, null, 'device is operationally up',
@@ -180,12 +193,12 @@ export function evaluate_interface(selector, snapshot, observed_at) {
 			!source_available(snapshot, 'wireless_runtime'))
 			return answer(false, 'status_unavailable',
 				'wireless radio state is unavailable', parsed, candidate, observed_at, evidence);
+		if (runtime?.retry_setup_failed === true)
+			return answer(false, 'wireless_initialization_failed',
+				'wireless radio initialization failed', parsed, candidate, observed_at, evidence);
 		if (!config || !runtime)
 			return answer(false, 'wireless_radio_down',
 				'wireless radio is not running', parsed, candidate, observed_at, evidence);
-		if (runtime.retry_setup_failed === true)
-			return answer(false, 'wireless_initialization_failed',
-				'wireless radio initialization failed', parsed, candidate, observed_at, evidence);
 		if (runtime.up === false)
 			return answer(false, 'wireless_radio_down',
 				'wireless radio is not running', parsed, candidate, observed_at, evidence);
@@ -200,10 +213,9 @@ export function evaluate_interface(selector, snapshot, observed_at) {
 	let parent = configured(snapshot, 'radios', 'id', config?.device);
 	let runtime_radio = snapshot?.runtime?.wireless?.[config?.device];
 	let runtime_iface = wireless_iface(snapshot, config?.device, parsed.id);
-	let live = snapshot?.runtime?.devices?.[runtime_iface?.ifname];
-	let live_present = runtime_iface?.ifname
-		? device_presence(snapshot, runtime_iface.ifname)
-		: false;
+	let live = runtime_iface?.ifname
+		? device_facts(snapshot, runtime_iface.ifname)
+		: { present: false, up: null, operstate: null };
 	let ap_name = config?.ssid ?? config?.mesh_id ?? 'unnamed';
 	let ap_suffix = `${config?.device ?? 'unknown-radio'} / ${parsed.id}`;
 	if (runtime_iface?.ifname) ap_suffix += ` (${runtime_iface.ifname})`;
@@ -218,9 +230,9 @@ export function evaluate_interface(selector, snapshot, observed_at) {
 		radio_up: runtime_radio?.up ?? null,
 		present: !!runtime_iface,
 		ifname: runtime_iface?.ifname ?? null,
-		live_present,
-		device_up: live?.up ?? null,
-		device_operstate: live?.operstate ?? null
+		live_present: live.present,
+		device_up: live.up,
+		device_operstate: live.operstate
 	};
 
 	if (config?.disabled === true || parent?.disabled === true ||
@@ -232,25 +244,29 @@ export function evaluate_interface(selector, snapshot, observed_at) {
 		!source_available(snapshot, 'wireless_runtime'))
 		return answer(false, 'status_unavailable',
 			'wireless AP state is unavailable', parsed, candidate, observed_at, evidence);
+	if (runtime_radio?.retry_setup_failed === true)
+		return answer(false, 'wireless_initialization_failed',
+			'wireless AP initialization failed', parsed, candidate, observed_at, evidence);
 	if (!config || !parent || !runtime_radio)
 		return answer(false, 'wireless_ap_down',
 			'wireless AP is not running', parsed, candidate, observed_at, evidence);
-	if (runtime_radio.retry_setup_failed === true)
-		return answer(false, 'wireless_initialization_failed',
-			'wireless AP initialization failed', parsed, candidate, observed_at, evidence);
 	if (!runtime_iface || !runtime_iface.ifname)
 		return answer(false, 'wireless_ap_down',
 			'wireless AP is not running', parsed, candidate, observed_at, evidence);
 	if (runtime_radio.up === false)
 		return answer(false, 'wireless_ap_down',
 			'wireless AP is not running', parsed, candidate, observed_at, evidence);
-	if (runtime_radio.up !== true || live_present == null)
+	if (runtime_radio.up !== true || live.present == null)
 		return answer(false, 'status_unavailable',
 			'wireless AP state is indeterminate', parsed, candidate, observed_at, evidence);
-	if (live_present === false || live?.up === false || operstate_down(live?.operstate))
+	if ((live.up === false && live.operstate == 'up') ||
+		(live.up === true && operstate_down(live.operstate)))
+		return answer(false, 'status_unavailable',
+			'wireless AP device state is contradictory', parsed, candidate, observed_at, evidence);
+	if (live.present === false || live.up === false || operstate_down(live.operstate))
 		return answer(false, 'wireless_ap_down',
 			'wireless AP is not running', parsed, candidate, observed_at, evidence);
-	if (live?.up !== true && live?.operstate != 'up')
+	if (live.up !== true && live.operstate != 'up')
 		return answer(false, 'status_unavailable',
 			'wireless AP device state is indeterminate', parsed, candidate, observed_at, evidence);
 	return answer(true, null, 'wireless AP is running',
