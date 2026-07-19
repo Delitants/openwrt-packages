@@ -61,13 +61,31 @@ function clean_text(value) {
 		line => replace(line, /[[:cntrl:]]/g, ' ')));
 };
 
+function redact_private_keys(value) {
+	let output = [];
+	let private_key = false;
+	for (let line in split(value, '\n')) {
+		if (!private_key && match(line, /-----BEGIN [^-]*PRIVATE KEY-----/i)) {
+			push(output, '[REDACTED PRIVATE KEY]');
+			private_key = !match(line, /-----END [^-]*PRIVATE KEY-----/i);
+			continue;
+		}
+		if (private_key) {
+			if (match(line, /-----END [^-]*PRIVATE KEY-----/i)) private_key = false;
+			continue;
+		}
+		push(output, line);
+	}
+	return join('\n', output);
+};
+
 export function redact_diagnostic_text(value) {
-	value = clean_text(value);
+	value = redact_private_keys(clean_text(value));
 	for (let pattern in [
-		/(\b(key|password|passphrase|(wpa_)?psk|sae(_password)?|radius(_secret|_key|_password)?|smtp(_password|_pass)?|secret|credential|token|api_key)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\n,;]+)/gi,
-		/("(key|password|passphrase|(wpa_)?psk|sae(_password)?|radius(_secret|_key|_password)?|smtp(_password|_pass)?|secret|credential|token|api_key)"\s*:\s*)("[^"]*"|'[^']*'|[^\n,;]+)/gi,
+		/(\b(key|password|passphrase|(wpa_)?psk|sae(_password)?|radius(_secret|_key|_password)?|smtp(_password|_pass)?|secret|credential|token|api_key|private_key|privatekey)\s*[:=]\s*)[^\n]*/gi,
+		/("(key|password|passphrase|(wpa_)?psk|sae(_password)?|radius(_secret|_key|_password)?|smtp(_password|_pass)?|secret|credential|token|api_key|private_key|privatekey)"\s*:\s*)[^\n]*/gi,
 		/((authorization|proxy-authorization)\s*:\s*)[^\n]+/gi,
-		/(-----BEGIN [^-]*PRIVATE KEY-----)[\s\S]*?(-----END [^-]*PRIVATE KEY-----)/gi
+		/("(authorization|proxy-authorization)"\s*:\s*)[^\n]*/gi
 	])
 		value = replace(value, pattern, '$1[REDACTED]');
 	return value;
@@ -105,19 +123,28 @@ function scalar_fields(value, names) {
 
 function normalized_errors(errors) {
 	let output = [];
+	let truncated = false;
 	for (let error in slice(errors ?? [], 0, ERROR_LIMIT)) {
 		let limited = truncate_text(redact_diagnostic_text(error), ERROR_TEXT_LIMIT,
 			' [truncated]');
+		truncated = truncated || limited.truncated;
 		push(output, limited.text);
 	}
-	if (length(errors ?? []) > ERROR_LIMIT)
+	if (length(errors ?? []) > ERROR_LIMIT) {
 		push(output, 'additional collection errors omitted');
-	return output;
+		truncated = true;
+	}
+	return { values: output, truncated };
 };
 
 export function render_diagnostic_report(sections, errors) {
 	let chunks = [];
-	let truncated = false;
+	let safe_errors = normalized_errors(errors);
+	let truncated = safe_errors.truncated;
+	if (length(safe_errors.values))
+		push(chunks, '## Diagnostic collection incomplete\n' +
+			join('\n', map(safe_errors.values, error => `- ${error}`)));
+
 	for (let section in sections ?? []) {
 		let value = section?.log
 			? newest_lines(section?.text, LOG_LINE_LIMIT)
@@ -126,35 +153,30 @@ export function render_diagnostic_report(sections, errors) {
 			'\n[section truncated]\n');
 		truncated = truncated || value.truncated || limited.truncated;
 		let title = truncate_text(redact_diagnostic_text(section?.title ?? 'Diagnostic'),
-			256, ' [truncated]').text;
-		push(chunks, `## ${title}\n${limited.text}`);
+			256, ' [truncated]');
+		truncated = truncated || title.truncated;
+		push(chunks, `## ${title.text}\n${limited.text}`);
 	}
-
-	let safe_errors = normalized_errors(errors);
-	if (length(safe_errors))
-		push(chunks, '## Diagnostic collection incomplete\n' +
-			join('\n', map(safe_errors, error => `- ${error}`)));
 
 	let total = truncate_text(join('\n\n', chunks) + '\n', REPORT_LIMIT,
 		'\n[report truncated]\n');
 	return {
 		text: total.text,
-		incomplete: length(safe_errors) > 0,
-		errors: safe_errors,
+		incomplete: length(safe_errors.values) > 0,
+		errors: safe_errors.values,
 		truncated: truncated || total.truncated
 	};
 };
 
-function relevant_logs(value, names) {
+function relevant_logs(value, tokens) {
 	let output = [];
 	for (let line in split(clean_text(value), '\n')) {
-		let lower = lc(line);
-		let relevant = match(lower,
-			/netifd|hostapd|wpa_supplicant|mac80211|cfg80211|ath[0-9a-z]*|iwlwifi|mt76/);
-		for (let name in names)
-			if (type(name) == 'string' && length(name) && index(lower, lc(name)) >= 0)
-				relevant = true;
-		if (relevant) push(output, line);
+		let words = split(replace(lc(line), /[^a-z0-9_.-]+/g, ' '), ' ');
+		for (let token in tokens) {
+			if (!(token in words)) continue;
+			push(output, line);
+			break;
+		}
 	}
 	return newest_lines(join('\n', output), LOG_LINE_LIMIT).text;
 };
@@ -162,6 +184,56 @@ function relevant_logs(value, names) {
 function safe_device_name(value) {
 	return type(value) == 'string' && length(value) <= 64 &&
 		!!match(value, /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/);
+};
+
+function diagnostic_tokens(snapshot, parsed, result) {
+	let output = [];
+	let seen = {};
+	function add(value) {
+		if (!safe_device_name(value)) return;
+		value = lc(value);
+		if (!seen[value]) push(output, value);
+		seen[value] = true;
+	};
+
+	add(parsed.id);
+	add(result?.live_device);
+	if (parsed.kind == 'network') {
+		for (let value in snapshot?.configured?.networks ?? []) {
+			if (value?.id != parsed.id) continue;
+			add(value?.device);
+			add(value?.ifname);
+		}
+		for (let value in snapshot?.runtime?.interfaces ?? []) {
+			if (value?.interface != parsed.id) continue;
+			add(value?.device);
+			add(value?.l3_device);
+		}
+		add(result?.evidence?.device);
+	}
+	else if (parsed.kind == 'wifi-radio') {
+		for (let value in snapshot?.configured?.wifi_ifaces ?? []) {
+			if (value?.device == parsed.id) add(value?.id);
+		}
+		for (let value in snapshot?.runtime?.wireless?.[parsed.id]?.interfaces ?? []) {
+			add(value?.section);
+			add(value?.ifname);
+		}
+	}
+	else if (parsed.kind == 'wifi-iface') {
+		let radio = null;
+		for (let value in snapshot?.configured?.wifi_ifaces ?? []) {
+			if (value?.id != parsed.id) continue;
+			radio = value?.device;
+			add(radio);
+		}
+		for (let value in snapshot?.runtime?.wireless?.[radio]?.interfaces ?? []) {
+			if (value?.section == parsed.id) add(value?.ifname);
+		}
+		add(result?.evidence?.radio);
+		add(result?.evidence?.ifname);
+	}
+	return output;
 };
 
 function selected_state(snapshot, parsed, result) {
@@ -296,7 +368,7 @@ export function collect_diagnostics_with(monitor, result, deps) {
 		'system log unavailable');
 	if (log_text != null) {
 		let filtered = relevant_logs(log_text,
-			[ parsed.id, selected?.configured?.device, device, result?.label ]);
+			diagnostic_tokens(snapshot, parsed, result));
 		push(sections, { title: 'Recent relevant logs', text: filtered, log: true });
 	}
 
@@ -305,23 +377,25 @@ export function collect_diagnostics_with(monitor, result, deps) {
 
 function valid_command(name, command) {
 	if (name == 'logread') return command == '/sbin/logread 2>&1';
-	if (name == 'link')
-		return !!match(command,
-			/^\/sbin\/ip -details address show dev '[A-Za-z0-9_][A-Za-z0-9_.-]*' 2>&1$/);
-	if (name == 'iwinfo')
-		return !!match(command,
-			/^\/usr\/bin\/iwinfo '[A-Za-z0-9_][A-Za-z0-9_.-]*' info 2>&1$/);
+	let parsed = name == 'link'
+		? match(command,
+			/^\/sbin\/ip -details address show dev '([A-Za-z0-9_][A-Za-z0-9_.-]*)' 2>&1$/)
+		: name == 'iwinfo'
+			? match(command,
+				/^\/usr\/bin\/iwinfo '([A-Za-z0-9_][A-Za-z0-9_.-]*)' info 2>&1$/)
+			: null;
+	if (parsed) return safe_device_name(parsed[1]);
 	return false;
 };
 
-function command_output(name, command) {
+export function command_output_with(name, command, deps) {
 	let path = COMMAND_PATHS[name];
 	if (!path || !valid_command(name, command)) return null;
-	try { if (!fs.stat(path)) return null; }
+	try { if (!deps.stat(path)) return null; }
 	catch (error) { return null; }
 
 	let process;
-	try { process = fs.popen(command, 'r'); }
+	try { process = deps.popen(command, 'r'); }
 	catch (error) { return null; }
 	if (!process) return null;
 
@@ -334,6 +408,13 @@ function command_output(name, command) {
 	catch (error) { read_ok = false; }
 	if (!read_ok) return null;
 	return { text: output, ok: status === 0 };
+};
+
+function command_output(name, command) {
+	return command_output_with(name, command, {
+		stat: (path) => fs.stat(path),
+		popen: (fixed, mode) => fs.popen(fixed, mode)
+	});
 };
 
 export function collect_diagnostics(monitor, result) {
