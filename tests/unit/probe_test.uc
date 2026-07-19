@@ -90,7 +90,12 @@ let fake_uloop = {
 };
 let callback_count = 0;
 let callback_reason = null;
-let dependencies = { fs: fake_fs, socket: fake_socket, uloop: fake_uloop };
+let dependencies = {
+	fs: fake_fs,
+	socket: fake_socket,
+	uloop: fake_uloop,
+	interface: () => ({ ok: false, reason: 'carrier_lost' })
+};
 equal(start_probe_with(ping_monitor, (probe_result) => {
 	callback_count++;
 	callback_reason = probe_result.reason;
@@ -133,3 +138,30 @@ task_result = task_function({
 });
 output_callback(task_result);
 equal(callback_count, 1, 'late task result cannot call parent again');
+
+task_function = null;
+output_callback = null;
+timeout_callback = null;
+scheduled_timeout = null;
+timer_cancels = 0;
+task_kills = 0;
+task_finished = false;
+callback_count = 0;
+callback_reason = null;
+let interface_monitor = {
+	type: 'interface', interface_selector: 'device:eth0', timeout: 5
+};
+equal(start_probe_with(interface_monitor, (probe_result) => {
+	callback_count++;
+	callback_reason = probe_result.reason;
+}, dependencies), true, 'interface probe starts through injected dependency');
+equal(scheduled_timeout, 5000, 'interface uses configured parent timeout');
+task_result = task_function({
+	send: (message) => { explicit_sends++; output_callback(message); }
+});
+task_finished = true;
+output_callback(task_result);
+equal(callback_count, 1, 'interface result calls parent exactly once');
+equal(callback_reason, 'carrier_lost', 'interface result is preserved');
+timeout_callback();
+equal(callback_count, 1, 'late interface timeout cannot call parent again');

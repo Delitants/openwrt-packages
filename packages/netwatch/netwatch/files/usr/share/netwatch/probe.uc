@@ -1,4 +1,5 @@
 import { parse_ping } from 'ping';
+import { run_interface } from 'interface_probe';
 
 const PING_INTERVAL_MS = 1000;
 const PING_GRACE_MS = 1000;
@@ -89,7 +90,14 @@ export function run_tcp_with(monitor, timeout_ms, socket_module) {
 
 function valid_probe(monitor, callback) {
 	if (type(monitor) != 'object' || type(callback) != 'function' ||
-		!safe_target(monitor.target) || !(monitor.type in ['ping', 'tcp']))
+		!(monitor.type in ['ping', 'tcp', 'interface'])) return false;
+
+	if (monitor.type in ['ping', 'tcp'] && !safe_target(monitor.target)) return false;
+	if (monitor.type == 'interface' &&
+		(type(monitor.interface_selector) != 'string' ||
+		 length(monitor.interface_selector) > 96 ||
+		 !match(monitor.interface_selector,
+			/^(network|device|wifi-radio|wifi-iface):[A-Za-z0-9_][A-Za-z0-9_.-]*$/)))
 		return false;
 
 	if (monitor.type == 'tcp' &&
@@ -103,13 +111,12 @@ export function start_probe_with(monitor, callback, dependencies) {
 	if (!valid_probe(monitor, callback) || type(dependencies) != 'object' ||
 		type(dependencies.fs) != 'object' ||
 		type(dependencies.socket) != 'object' ||
-		type(dependencies.uloop) != 'object')
+		type(dependencies.uloop) != 'object' ||
+		type(dependencies.interface) != 'function')
 		return false;
 
 	let timeout_ms = fixed_integer(monitor.timeout, 1, 60, 5) * 1000;
-	let parent_timeout_ms = monitor.type == 'ping'
-		? ping_timeout_ms(monitor)
-		: timeout_ms;
+	let parent_timeout_ms = monitor.type == 'ping' ? ping_timeout_ms(monitor) : timeout_ms;
 	let task_handle = null;
 	let timeout_handle = null;
 	let completed = false;
@@ -131,13 +138,16 @@ export function start_probe_with(monitor, callback, dependencies) {
 			// uloop.task() serializes this return value to the output callback.
 			// Calling pipe.send() as well would emit a second message.
 			try {
-				return monitor.type == 'ping'
-					? run_ping_with(monitor, dependencies.fs)
-					: run_tcp_with(monitor, timeout_ms, dependencies.socket);
+				if (monitor.type == 'ping')
+					return run_ping_with(monitor, dependencies.fs);
+				if (monitor.type == 'tcp')
+					return run_tcp_with(monitor, timeout_ms, dependencies.socket);
+				return dependencies.interface(monitor);
 			}
 			catch (error) {
 				return probe_result(false,
-					monitor.type == 'tcp' ? 'connect_failed' : 'probe_failed',
+					monitor.type == 'tcp' ? 'connect_failed' :
+						monitor.type == 'interface' ? 'status_unavailable' : 'probe_failed',
 					'probe failed');
 			}
 		},
@@ -178,6 +188,7 @@ export function start_probe(monitor, callback) {
 	return start_probe_with(monitor, callback, {
 		fs: require('fs'),
 		socket: require('socket'),
-		uloop: require('uloop')
+		uloop: require('uloop'),
+		interface: run_interface
 	});
 };
