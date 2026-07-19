@@ -105,6 +105,12 @@ export function valid_target(value) {
 		!!match(value, /^[A-Za-z0-9_.:%-]+$/);
 };
 
+export function valid_interface_selector(value) {
+	return type(value) == 'string' && length(value) <= 96 &&
+		!!match(value,
+			/^(network|device|wifi-radio|wifi-iface):[A-Za-z0-9_][A-Za-z0-9_.-]*$/);
+};
+
 export function normalize_global(raw) {
 	raw ??= {};
 
@@ -138,15 +144,19 @@ export function normalize_monitor(id, raw) {
 	let monitor_id = plain_monitor_string({ id }, 'id', '', errors);
 	let target = plain_monitor_string(raw, 'target', '', errors);
 	let monitor_type = plain_monitor_string(raw, 'type', '', errors);
+	let interface_selector = plain_monitor_string(raw, 'interface_selector', '', errors);
 	let repeat_interval = raw.repeat_interval == null || raw.repeat_interval == ''
 		? 0
 		: plain_integer(raw.repeat_interval);
 
-	if (!valid_target(target))
+	if (!(monitor_type in ['ping', 'tcp', 'interface']))
+		push(errors, 'type must be ping, tcp, or interface');
+
+	if (monitor_type in ['ping', 'tcp'] && !valid_target(target))
 		push(errors, 'target is invalid');
 
-	if (!(monitor_type in ['ping', 'tcp']))
-		push(errors, 'type must be ping or tcp');
+	if (monitor_type == 'interface' && !valid_interface_selector(interface_selector))
+		push(errors, 'interface selector is invalid');
 
 	if (!(repeat_interval in REPEAT)) {
 		push(errors, 'repeat interval must be 0, 600, 1800, or 3600');
@@ -157,7 +167,8 @@ export function normalize_monitor(id, raw) {
 		id: monitor_id,
 		enabled: monitor_bool(raw, 'enabled', true, errors),
 		name: plain_monitor_string(raw, 'name', monitor_id, errors),
-		target,
+		target: monitor_type == 'interface' ? '' : target,
+		interface_selector: monitor_type == 'interface' ? interface_selector : '',
 		type: monitor_type,
 		interval: normalized_integer(raw.interval, 'interval', LIMITS.interval, errors),
 		timeout: normalized_integer(raw.timeout, 'timeout', LIMITS.timeout, errors),

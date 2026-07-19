@@ -1,5 +1,5 @@
 import { deep_equal, equal, truthy } from 'test';
-import { valid_target, normalize_global, normalize_smtp, normalize_monitor } from 'config';
+import { valid_target, valid_interface_selector, normalize_global, normalize_smtp, normalize_monitor } from 'config';
 
 truthy(valid_target('192.0.2.1'), 'IPv4 accepted');
 truthy(valid_target('2001:db8::1'), 'IPv6 accepted');
@@ -85,3 +85,26 @@ equal(normalized_ping.value.enabled, false, 'disabled monitor normalized');
 equal(normalized_ping.value.recovery_email, true, 'recovery boolean normalized');
 equal(normalized_ping.value.loss_enabled, true, 'loss boolean normalized');
 equal(normalized_ping.value.rtt_enabled, false, 'RTT boolean normalized');
+
+truthy(valid_interface_selector('network:wan'), 'logical network selector accepted');
+truthy(valid_interface_selector('device:br-lan'), 'Linux device selector accepted');
+truthy(valid_interface_selector('wifi-radio:radio0'), 'radio selector accepted');
+truthy(valid_interface_selector('wifi-iface:guest_5g'), 'AP selector accepted');
+equal(valid_interface_selector('device:-eth0'), false, 'option-like device rejected');
+equal(valid_interface_selector('device:eth0/reboot'), false, 'path syntax rejected');
+equal(valid_interface_selector('wifi-iface:guest\nkey'), false, 'control character rejected');
+equal(valid_interface_selector('other:wan'), false, 'unknown selector kind rejected');
+
+let interface_monitor = normalize_monitor('wifi_watch', {
+	type: 'interface', interface_selector: 'wifi-iface:guest_5g'
+});
+truthy(interface_monitor.ok, 'interface monitor does not require host target');
+equal(interface_monitor.value.target, '', 'interface monitor has no host target');
+equal(interface_monitor.value.interface_selector, 'wifi-iface:guest_5g',
+	'interface selector normalized');
+equal(normalize_monitor('missing', { type: 'interface' }).ok, false,
+	'interface selector required');
+equal(normalize_monitor('ping', { type: 'ping', target: 'router.example' }).ok, true,
+	'ping compatibility retained');
+equal(normalize_monitor('tcp', { type: 'tcp', target: 'router.example', port: '443' }).ok, true,
+	'TCP compatibility retained');
