@@ -150,6 +150,47 @@ equal(match(report.text, /unrelated service/), null, 'unrelated log excluded');
 equal(match(report.text, /must-not-exist|log-secret/), null, 'structured and log secrets absent');
 truthy(report.incomplete, 'missing optional iwinfo recorded without suppressing report');
 
+let required_reads = [];
+let degraded_sysfs = collect_diagnostics_with(
+	{ type: 'interface', interface_selector: 'device:eth0' },
+	{ reason: 'link_down', label: 'eth0', live_device: 'eth0', evidence: {} },
+	{
+		clock: () => 1700000100,
+		snapshot: () => ({ configured: { devices: [ { name: 'eth0' } ] },
+			runtime: { devices: { eth0: { up: false } } }, sources: {}, errors: [] }),
+		readfile: (path, limit) => {
+			push(required_reads, path);
+			return path == '/sys/class/net/eth0/operstate' ? 'down\n' : null;
+		},
+		readlink: (path) => null,
+		command: (name, command) => name == 'logread'
+			? 'netifd: eth0 link failed' : 'link details'
+	});
+equal(length(required_reads), 10, 'all fixed required sysfs facts attempted');
+truthy(match(degraded_sysfs.text, /"operstate"\s*:\s*"down"/),
+	'successful sysfs fact preserved through partial read failure');
+truthy(degraded_sysfs.incomplete, 'null required sysfs reads mark report incomplete');
+truthy(match(degraded_sysfs.text, /kernel interface facts incomplete/),
+	'bounded required sysfs failure detail rendered');
+truthy(length(degraded_sysfs.text) <= 65536,
+	'degraded sysfs report remains bounded');
+
+let optional_driver = collect_diagnostics_with(
+	{ type: 'interface', interface_selector: 'device:eth0' },
+	{ reason: null, label: 'eth0', live_device: 'eth0', evidence: {} },
+	{
+		clock: () => 1700000100,
+		snapshot: () => ({ configured: { devices: [ { name: 'eth0' } ] },
+			runtime: { devices: { eth0: { up: true } } }, sources: {}, errors: [] }),
+		readfile: (path, limit) => match(path, /\/address$/)
+			? '00:11:22:33:44:55\n' : '1\n',
+		readlink: (path) => null,
+		command: (name, command) => name == 'logread'
+			? 'netifd: eth0 link ready' : 'link details'
+	});
+equal(optional_driver.incomplete, false,
+	'optional driver symlink absence does not degrade report');
+
 let correlated_lines = [];
 for (let i = 0; i < 260; i++) push(correlated_lines, `netifd: lan event ${i}`);
 for (let line in [
@@ -184,6 +225,14 @@ equal(match(correlated.text, /netifd: lan event 0\n/), null,
 	'oldest correlated log line discarded');
 truthy(match(correlated.text, /netifd: lan event 259/),
 	'newest correlated log line retained');
+let retained_correlated_lines = 0;
+for (let line in split(correlated.text, '\n'))
+	if (match(line, /^(netifd: lan event [0-9]+|kernel: br-lan carrier lost)$/))
+		retained_correlated_lines++;
+equal(retained_correlated_lines, 200,
+	'exactly newest 200 selected-object log lines retained');
+truthy(correlated.truncated,
+	'discarded correlated log lines set report truncation metadata');
 
 let unsafe_commands = [];
 collect_diagnostics_with(

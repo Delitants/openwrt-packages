@@ -178,7 +178,7 @@ function relevant_logs(value, tokens) {
 			break;
 		}
 	}
-	return newest_lines(join('\n', output), LOG_LINE_LIMIT).text;
+	return join('\n', output);
 };
 
 function safe_device_name(value) {
@@ -340,6 +340,7 @@ export function collect_diagnostics_with(monitor, result, deps) {
 			try { value = deps.readfile(`/sys/class/net/${device}/${name}`, 4096); }
 			catch (error) { sysfs_failed = true; }
 			if (value != null) sysfs[name] = trim(clean_text(value));
+			else sysfs_failed = true;
 		}
 		let driver = null;
 		try { driver = deps.readlink(`/sys/class/net/${device}/device/driver`); }
