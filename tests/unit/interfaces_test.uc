@@ -203,3 +203,53 @@ let uci_outage = collect_interface_inventory_with({
 truthy(candidate(uci_outage, 'devices', 'device:eth9'),
 	'live device retained when cursor construction fails');
 truthy('uci unavailable' in uci_outage.errors, 'cursor construction failure reported');
+
+let ap_radio_down = inventory_from_snapshot({
+	configured: {
+		networks: [], devices: [],
+		radios: [ { id: 'radio0', disabled: false } ],
+		wifi_ifaces: [ { id: 'main_ap', device: 'radio0', mode: 'ap', disabled: false } ]
+	},
+	runtime: {
+		interfaces: [], devices: {}, sys_devices: [],
+		wireless: { radio0: { up: false, disabled: false, interfaces: [ { section: 'main_ap', ifname: 'phy0-ap0' } ] } }
+	},
+	sources: { logical_runtime: true, device_runtime: true, wireless_runtime: true, sysfs_devices: true },
+	errors: []
+});
+equal(candidate(ap_radio_down, 'wifi-aps', 'wifi-iface:main_ap').state, 'down',
+	'matching AP follows explicit down radio state');
+
+let ap_radio_unknown = inventory_from_snapshot({
+	configured: {
+		networks: [], devices: [],
+		radios: [ { id: 'radio0', disabled: false } ],
+		wifi_ifaces: [ { id: 'main_ap', device: 'radio0', mode: 'ap', disabled: false } ]
+	},
+	runtime: {
+		interfaces: [], devices: {}, sys_devices: [],
+		wireless: { radio0: { disabled: false, interfaces: [ { section: 'main_ap', ifname: 'phy0-ap0' } ] } }
+	},
+	sources: { logical_runtime: true, device_runtime: true, wireless_runtime: true, sysfs_devices: true },
+	errors: []
+});
+equal(candidate(ap_radio_unknown, 'wifi-aps', 'wifi-iface:main_ap').state, null,
+	'matching AP without radio state remains unknown');
+
+let device_presence_unknown = inventory_from_snapshot({
+	configured: { networks: [], devices: [], radios: [], wifi_ifaces: [] },
+	runtime: { interfaces: [], devices: { eth9: { up: false } }, wireless: {}, sys_devices: [] },
+	sources: { logical_runtime: true, device_runtime: true, wireless_runtime: true, sysfs_devices: false },
+	errors: []
+});
+equal(candidate(device_presence_unknown, 'devices', 'device:eth9').present, null,
+	'device status without presence remains unknown while sysfs is unavailable');
+
+let device_absent = inventory_from_snapshot({
+	configured: { networks: [], devices: [], radios: [], wifi_ifaces: [] },
+	runtime: { interfaces: [], devices: { eth9: { present: false, up: false } }, wireless: {}, sys_devices: [] },
+	sources: { logical_runtime: true, device_runtime: true, wireless_runtime: true, sysfs_devices: false },
+	errors: []
+});
+equal(candidate(device_absent, 'devices', 'device:eth9').state, 'absent',
+	'explicit absent device takes precedence over down state');

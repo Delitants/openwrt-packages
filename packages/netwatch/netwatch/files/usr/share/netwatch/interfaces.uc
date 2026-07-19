@@ -231,14 +231,14 @@ function runtime_present(value, available) {
 
 function device_present(name, devices, sys_devices, device_available, sysfs_available) {
 	if (name in sys_devices) return true;
-	if (name in devices) return bool_value(devices[name]?.present, true);
+	if (name in devices) return bool_value(devices[name]?.present, null);
 	return device_available === true || sysfs_available === true ? false : null;
 };
 
 function state_from_runtime(up, present) {
+	if (present === false) return 'absent';
 	if (up === true) return 'up';
 	if (up === false) return 'down';
-	if (present === false) return 'absent';
 	return null;
 };
 
@@ -348,10 +348,11 @@ export function inventory_from_snapshot(snapshot) {
 		let parent_disabled = configured_radios[ap.device]?.disabled === true;
 		let runtime_disabled = bool_value(runtime_radio?.disabled, null);
 		let present = runtime_present(runtime_iface, wireless_available);
+		let radio_up = bool_value(runtime_radio?.up, null);
 		push(groups[3].items, public_candidate(selector, 'wifi-iface',
 			ap_label(ap, runtime_iface?.ifname), ap.id, runtime_iface?.ifname ?? null,
 			true, present, ap.disabled || parent_disabled || runtime_disabled === true ? false : true,
-			ap.disabled || parent_disabled || runtime_disabled === true ? 'disabled' : runtime_iface ? 'up' : present === false ? 'absent' : null,
+			ap.disabled || parent_disabled || runtime_disabled === true ? 'disabled' : present === false ? 'absent' : radio_up === true ? 'up' : radio_up === false ? 'down' : null,
 			ap.device ?? null));
 		seen[selector] = true;
 	}
