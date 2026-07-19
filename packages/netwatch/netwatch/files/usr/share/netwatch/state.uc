@@ -6,6 +6,7 @@ export function new_state(id) {
 		last_check: null,
 		last_result: null,
 		incident_started: null,
+		last_transition: null,
 		failure_emails: 0,
 		last_email: null,
 		next_mail_attempt: null,
@@ -14,6 +15,12 @@ export function new_state(id) {
 		busy: false,
 		config_error: null
 	};
+};
+
+function set_status(state, status, now) {
+	if (state.status != status)
+		state.last_transition = now;
+	state.status = status;
 };
 
 function clear_active_incident(state) {
@@ -26,7 +33,7 @@ function clear_active_incident(state) {
 
 export function apply_result(state, monitor, result, now) {
 	if (!monitor.enabled) {
-		state.status = 'disabled';
+		set_status(state, 'disabled', now);
 		clear_active_incident(state);
 		state.recovery_pending = null;
 		return 'disabled';
@@ -41,13 +48,14 @@ export function apply_result(state, monitor, result, now) {
 				incident_started: state.incident_started,
 				recovered_at: now,
 				failure_emails: state.failure_emails,
-				last_result: state.last_result
+				last_result: state.last_result,
+				recovered_result: result
 			};
 		}
 
 		state.last_check = now;
 		state.last_result = result;
-		state.status = 'healthy';
+		set_status(state, 'healthy', now);
 		clear_active_incident(state);
 
 		if (previous_status == 'failed')
@@ -64,11 +72,11 @@ export function apply_result(state, monitor, result, now) {
 		return 'failed';
 
 	if (state.consecutive_failures < monitor.failures) {
-		state.status = 'pending';
+		set_status(state, 'pending', now);
 		return 'pending';
 	}
 
-	state.status = 'failed';
+	set_status(state, 'failed', now);
 	state.incident_started = now;
 	state.failure_emails = 0;
 	state.last_email = null;

@@ -259,6 +259,31 @@ export function render_msmtp(smtp) {
 	return `${join('\n', lines)}\n`;
 };
 
+function safe_body_block(value, field) {
+	let disallowed_controls = type(value) == 'string'
+		? replace(value, /[\t\n]/g, '') : '';
+	if (type(value) != 'string' || length(value) > 65536 ||
+		match(disallowed_controls, /[[:cntrl:]]/))
+		die(`${field} contains invalid characters`);
+	return value;
+};
+
+function interface_identity_lines(result) {
+	if (type(result) != 'object') die('interface result is required');
+	let lines = [
+		`Interface: ${safe_text(result.label ?? result.configured_name, 'interface label', false)}`,
+		`Selector: ${safe_text(result.selector, 'interface selector', false)}`,
+		`Interface kind: ${safe_text(result.kind, 'interface kind', false)}`
+	];
+	if (type(result.live_device) == 'string' && result.live_device != '')
+		push(lines, `Live device: ${safe_text(result.live_device, 'live device', false)}`);
+	if (type(result.summary) == 'string' && result.summary != '')
+		push(lines, `Summary: ${safe_text(result.summary, 'interface summary', false)}`);
+	if (type(result.evidence) == 'object')
+		push(lines, `Evidence: ${sprintf('%J', result.evidence)}`);
+	return lines;
+};
+
 export function render_message(kind, context) {
 	if (!(kind in ['failure', 'recovery']) || type(context) != 'object' ||
 		type(context.smtp) != 'object' || type(context.monitor) != 'object' ||
@@ -273,7 +298,8 @@ export function render_message(kind, context) {
 	let from_name = display_name(raw_from_name);
 	let recipients = message_recipients(context.recipients);
 	let name = safe_text(monitor.name, 'monitor name', false);
-	let target = safe_text(monitor.target, 'monitor target', false);
+	let is_interface = monitor.type == 'interface';
+	let target = is_interface ? '' : safe_text(monitor.target, 'monitor target', false);
 	let monitor_id = safe_text(monitor.id, 'monitor ID', false);
 	let hostname = safe_text(context.router_hostname, 'router hostname', false);
 
@@ -294,20 +320,41 @@ export function render_message(kind, context) {
 		if (type(result) != 'object')
 			die('failure result is required');
 
-		let reason = safe_text(result.reason, 'failure reason', false);
 		let alert_number = integer(state.failure_emails, 'failure email count') + 1;
 		let max_alerts = integer(monitor.max_alerts, 'maximum alerts');
 
 		duration = timestamp - incident;
-		subject = `[Netwatch DOWN] ${name}`;
-		body = [
-			`Monitor: ${name}`,
-			`Target: ${target}`,
-			`Reason: ${reason}`,
-			`Incident time: ${rfc5322_date(incident)}`,
-			`Duration: ${duration_text(duration)}`,
-			`Alert ${alert_number} of ${max_alerts}`
-		];
+		if (is_interface) {
+			let label = safe_text(result.label ?? result.configured_name,
+				'interface label', false);
+			subject = `[Netwatch DOWN][${hostname}] ${name} — ${label}`;
+			body = [
+				`Monitor: ${name}`,
+				...interface_identity_lines(result),
+				`Reason: ${safe_text(result.reason, 'failure reason', false)}`,
+				`Last check: ${rfc5322_date(integer(state.last_check, 'last check'))}`,
+				`Incident time: ${rfc5322_date(incident)}`,
+				`Duration: ${duration_text(duration)}`,
+				`Alert ${alert_number} of ${max_alerts}`
+			];
+			if (type(context.diagnostic) == 'object' &&
+				type(context.diagnostic.text) == 'string') {
+				push(body, '');
+				push(body, safe_body_block(context.diagnostic.text, 'diagnostic report'));
+			}
+		}
+		else {
+			let reason = safe_text(result.reason, 'failure reason', false);
+			subject = `[Netwatch DOWN] ${name}`;
+			body = [
+				`Monitor: ${name}`,
+				`Target: ${target}`,
+				`Reason: ${reason}`,
+				`Incident time: ${rfc5322_date(incident)}`,
+				`Duration: ${duration_text(duration)}`,
+				`Alert ${alert_number} of ${max_alerts}`
+			];
+		}
 	}
 	else {
 		let pending = state.recovery_pending;
@@ -319,14 +366,30 @@ export function render_message(kind, context) {
 		let recovered_at = integer(pending.recovered_at, 'recovery time');
 
 		duration = recovered_at - incident;
-		subject = `[Netwatch RECOVERED] ${name}`;
-		body = [
-			`Monitor: ${name}`,
-			`Target: ${target}`,
-			`Incident time: ${rfc5322_date(incident)}`,
-			`Recovered at: ${rfc5322_date(recovered_at)}`,
-			`Duration: ${duration_text(duration)}`
-		];
+		if (is_interface) {
+			let recovered = pending.recovered_result;
+			let label = safe_text(recovered?.label ?? recovered?.configured_name,
+				'interface label', false);
+			subject = `[Netwatch RECOVERED][${hostname}] ${name} — ${label}`;
+			body = [
+				`Monitor: ${name}`,
+				...interface_identity_lines(recovered),
+				`Recovered state: ${safe_text(recovered.summary, 'recovery summary', false)}`,
+				`Incident time: ${rfc5322_date(incident)}`,
+				`Recovered at: ${rfc5322_date(recovered_at)}`,
+				`Duration: ${duration_text(duration)}`
+			];
+		}
+		else {
+			subject = `[Netwatch RECOVERED] ${name}`;
+			body = [
+				`Monitor: ${name}`,
+				`Target: ${target}`,
+				`Incident time: ${rfc5322_date(incident)}`,
+				`Recovered at: ${rfc5322_date(recovered_at)}`,
+				`Duration: ${duration_text(duration)}`
+			];
+		}
 	}
 
 	let headers = [

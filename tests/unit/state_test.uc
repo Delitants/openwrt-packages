@@ -13,6 +13,7 @@ let fresh = new_state('stable-keys');
 deep_equal(fresh, {
 	id: 'stable-keys', status: 'unknown', consecutive_failures: 0,
 	last_check: null, last_result: null, incident_started: null,
+	last_transition: null,
 	failure_emails: 0, last_email: null, next_mail_attempt: null,
 	recovery_eligible: false, recovery_pending: null,
 	busy: false, config_error: null
@@ -53,7 +54,8 @@ deep_equal(alerted.recovery_pending, {
 	incident_started: 700,
 	recovered_at: 760,
 	failure_emails: 2,
-	last_result: bad
+	last_result: bad,
+	recovered_result: good
 }, 'recovery preserves completed incident details');
 equal(alerted.incident_started, null, 'recovery clears active incident timestamp');
 equal(alerted.failure_emails, 0, 'recovery clears successful failure-email count');
@@ -75,3 +77,22 @@ equal(apply_result(disabled_recovery, recovery_off, good, 1060), 'recovered',
 	'recovery-disabled incident closes');
 equal(disabled_recovery.recovery_pending, null,
 	'recovery-disabled monitor does not queue recovery email');
+
+let interface_state = new_state('wifi');
+let interface_monitor = { enabled: true, failures: 1, recovery_email: true };
+let failed_interface = {
+	ok: false, reason: 'wireless_ap_down', selector: 'wifi-iface:office'
+};
+let recovered_interface = {
+	ok: true, reason: null, selector: 'wifi-iface:office',
+	label: 'AP: Office', live_device: 'phy0-ap0', evidence: { present: true }
+};
+equal(apply_result(interface_state, interface_monitor, failed_interface, 100), 'opened',
+	'interface incident opens');
+equal(interface_state.last_transition, 100, 'failed transition time recorded');
+interface_state.recovery_eligible = true;
+equal(apply_result(interface_state, interface_monitor, recovered_interface, 160), 'recovered',
+	'interface incident recovers');
+equal(interface_state.last_transition, 160, 'recovery transition time recorded');
+deep_equal(interface_state.recovery_pending.recovered_result, recovered_interface,
+	'fresh recovery result retained for concise recovery email');

@@ -9,10 +9,11 @@ export function public_status(daemon_started, last_reload, mail_error, states) {
 		daemon_started,
 		last_reload,
 		mail_error,
-		monitors: states.map((s) => ({
+		monitors: map(states, (s) => ({
 			id: s.id,
 			status: s.status,
 			last_check: s.last_check,
+			last_transition: s.last_transition,
 			last_result: s.last_result,
 			consecutive_failures: s.consecutive_failures,
 			incident_started: s.incident_started,

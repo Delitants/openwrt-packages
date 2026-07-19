@@ -14,6 +14,34 @@ function rejected(callback, label) {
 	truthy(did_reject, label);
 };
 
+function decoded_subject(message) {
+	let decoded = '';
+	let subject = false;
+
+	for (let line in split(split(message, '\n\n')[0], '\n')) {
+		if (match(line, /^Subject: /)) {
+			subject = true;
+			line = substr(line, 9);
+		}
+		else if (subject && match(line, /^ /)) {
+			line = substr(line, 1);
+		}
+		else if (subject) {
+			break;
+		}
+		else {
+			continue;
+		}
+
+		let encoded = match(line,
+			/^=\?UTF-8\?B\?([A-Za-z0-9+\/=]+)\?=$/);
+		truthy(encoded, 'subject uses RFC 2047 encoded-words');
+		decoded += b64dec(encoded[1]);
+	}
+
+	return decoded;
+};
+
 deep_equal(split_recipients('a@example.test, b@example.test'),
 	['a@example.test', 'b@example.test'], 'comma-separated recipients split');
 rejected(() => split_recipients('a@example.test\rb@example.test'),
@@ -199,3 +227,57 @@ rejected(() => render_message('failure', {
 	...context,
 	recipients: ['ops;admin@example.test']
 }), 'invalid To addr-spec rejected');
+
+let interface_context = {
+	...context,
+	monitor: {
+		id: 'office_wifi', name: 'Office Wi-Fi', type: 'interface', target: '',
+		interface_selector: 'wifi-iface:office', max_alerts: 4
+	},
+	state: {
+		incident_started: 1700000000, failure_emails: 1, last_check: 1700000060,
+		last_result: {
+			ok: false, reason: 'wireless_ap_down', summary: 'wireless AP is not running',
+			selector: 'wifi-iface:office', kind: 'wifi-iface',
+			configured_name: 'office', label: 'AP: Office WiFi — radio0 / office',
+			live_device: 'phy0-ap0', observed_at: 1700000060,
+			evidence: { radio: 'radio0', present: false }
+		}
+	},
+	diagnostic: {
+		text: '## Recent relevant logs\nnetifd: radio0 setup failed\n',
+		incomplete: false, errors: [], truncated: false
+	}
+};
+let interface_failure = render_message('failure', interface_context);
+equal(decoded_subject(interface_failure),
+	'[Netwatch DOWN][router.example.test] Office Wi-Fi — AP: Office WiFi — radio0 / office',
+	'router identity and interface label included in encoded failure subject');
+truthy(match(interface_failure, /Interface: AP: Office WiFi/), 'friendly interface rendered');
+truthy(match(interface_failure, /Selector: wifi-iface:office/), 'stable selector rendered');
+truthy(match(interface_failure, /Live device: phy0-ap0/), 'live device rendered');
+truthy(match(interface_failure, /Summary: wireless AP is not running/), 'summary rendered');
+truthy(match(interface_failure, /Last check: Tue, 14 Nov 2023 22:14:20 \+0000/),
+	'last check time rendered');
+truthy(match(interface_failure, /netifd: radio0 setup failed/), 'diagnostic report rendered');
+
+let interface_recovery = render_message('recovery', {
+	...interface_context,
+	diagnostic: interface_context.diagnostic,
+	state: { recovery_pending: {
+		incident_started: 1700000000, recovered_at: 1700000120, failure_emails: 2,
+		last_result: interface_context.state.last_result,
+		recovered_result: {
+			ok: true, selector: 'wifi-iface:office', kind: 'wifi-iface',
+			label: 'AP: Office WiFi — radio0 / office', live_device: 'phy0-ap0',
+			summary: 'wireless AP is running', evidence: { present: true }
+		}
+	} }
+});
+equal(decoded_subject(interface_recovery),
+	'[Netwatch RECOVERED][router.example.test] Office Wi-Fi — AP: Office WiFi — radio0 / office',
+	'router identity and interface label included in encoded recovery subject');
+truthy(match(interface_recovery, /Recovered state: wireless AP is running/),
+	'fresh recovery snapshot rendered');
+equal(match(interface_recovery, /Recent relevant logs/), null,
+	'failure diagnostics omitted from recovery');
