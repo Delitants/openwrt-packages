@@ -5,7 +5,7 @@
 			"uci": [ "netwatch" ],
 			"ubus": {
 				"luci-rpc": [ "getDHCPLeases" ],
-				"netwatch": [ "status" ]
+				"netwatch": [ "status", "interfaces" ]
 			}
 		},
 		"write": {

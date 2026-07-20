@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: luci-app-netwatch 1.0.0\n"
+"Project-Id-Version: luci-app-netwatch 1.1.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-12 00:00+0000\n"
+"POT-Creation-Date: 2026-07-18 00:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -11,368 +11,561 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:135
 msgid "%d%% packet loss"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:138
 msgid "%s ms average RTT"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:160
 msgid "%s: %s"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:136
 msgid "Add monitor"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:106
+msgid "Administratively disabled"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:238
 msgid "After 1 hour"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:235
 msgid "After 10 minutes"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:236
 msgid "After 15 minutes"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:237
 msgid "After 30 minutes"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:234
 msgid "After 5 minutes"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:114
+msgid "Carrier lost"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:214
 msgid "Check high delay"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:177
 msgid "Check interval"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:271
 msgid "Check now"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:202
 msgid "Check packet loss"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:95
 msgid "Clear stored password"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:259
 msgid "Comma-separated addresses. Leave empty to use the global recipients."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:54
 msgid "Comma-separated email addresses used unless a monitor overrides them."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:39
 msgid "Configure the SMTP server and notification recipients."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:104
 msgid "Connection failed"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:102
 msgid "Connection refused"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:94
 msgid "Could not start test"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:88
 msgid "Delay too high"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:239
 msgid "Disabled"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:112
 msgid "EHLO name"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json:19
+msgid "Email"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:370
 msgid "Emails"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:44
 msgid "Enable Netwatch"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:138
 msgid "Enabled"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:245
 msgid "Every 10 minutes"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:246
 msgid "Every 30 minutes"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:247
 msgid "Every hour"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:96
 msgid "Explicitly remove the stored SMTP password when saving."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:235
 msgid "Failed"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:189
 msgid "Failures before down"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:232
 msgid "First email"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:106
 msgid "From address"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:110
 msgid "From name"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:53
 msgid "Global recipients"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json:3
+msgid "Grant access to the Netwatch service"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:227
 msgid "Healthy"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:153
 msgid "Host or IP address"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:84
 msgid "Host unreachable"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:233
 msgid "Immediately"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:368
 msgid "Incident"
 msgstr ""
 
-msgid "Invalid configuration"
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:108
+msgid "Interface absent"
 msgstr ""
 
-msgid "Invalid ping response"
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:163
+msgid ""
+"Interface inventory is temporarily incomplete. Saved selections are "
+"preserved."
 msgstr ""
 
-msgid "Interface inventory is temporarily incomplete. Saved selections are preserved."
-msgstr ""
-
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:161
 msgid "Interface or Wi-Fi AP"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:149
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:196
 msgid "Interface state"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:122
+msgid "Interface status unavailable"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:110
+msgid "Interface unavailable"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:221
+msgid "Invalid configuration"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:92
+msgid "Invalid ping response"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:366
 msgid "Last check"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:369
+msgid "Last transition"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:83
 msgid "Leave the placeholder unchanged to keep the stored password."
 msgstr ""
 
-msgid "Live status is temporarily unavailable."
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:112
+msgid "Link down"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:17
 msgid "Linux devices"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:299
+msgid "Live status is temporarily unavailable."
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:57
 msgid "Mail retry backoff"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:219
 msgid "Maximum average delay"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:252
 msgid "Maximum emails"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:207
 msgid "Maximum packet loss"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:219
 msgid "Milliseconds."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:91
 msgid "Missing selections"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:87
 msgid "Missing: %s"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:362
 msgid "Monitor"
 msgstr ""
 
-msgid "Monitor hosts, TCP services, OpenWrt networks, Linux devices, Wi-Fi radios, and APs."
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:129
+msgid ""
+"Monitor hosts, TCP services, OpenWrt networks, Linux devices, Wi-Fi radios, "
+"and APs."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:130
+#: /src/packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json:14
 msgid "Monitors"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:143
 msgid "Name"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:100
 msgid "Name lookup failed"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json:3
+msgid "Netwatch"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:38
 msgid "Netwatch email"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:128
 msgid "Netwatch monitors"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:384
 msgid "Netwatch status"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:285
 msgid "Never"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:318
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:377
 msgid "No monitors configured."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:130
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:157
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:165
 msgid "No result"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:74
 msgid "None"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:64
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:278
 msgid "Not configured"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:42
 msgid "Notifications"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:244
 msgid "One time"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:16
 msgid "OpenWrt networks"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:144
 msgid "Optional label"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:112
 msgid "Optional name sent to the SMTP server."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:116
 msgid "Optional. Leave empty to use the global recipients."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:86
 msgid "Packet loss too high"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:82
 msgid "Password"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:231
 msgid "Pending"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:207
 msgid "Percent."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:147
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:197
 msgid "Ping"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:90
 msgid "Ping failed"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:195
 msgid "Ping packets"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:68
 msgid "Port"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:155
 msgid "Port %d"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:258
 msgid "Recipient override"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:243
 msgid "Repeat emails"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:367
 msgid "Result"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:62
 msgid "SMTP server"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:75
 msgid "STARTTLS"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:124
 msgid "Save, apply, and send test"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:183
 msgid "Seconds allowed for each test."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:48
 msgid "Seconds before checks begin after service start."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:177
 msgid "Seconds between checks."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:57
 msgid "Seconds to wait after a failed delivery before trying again."
 msgstr ""
 
-msgid "Select an active DHCP lease or enter a target manually."
-msgstr ""
-
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:164
 msgid "Select an OpenWrt network, Linux device, Wi-Fi radio, or AP/SSID."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:154
+msgid "Select an active DHCP lease or enter a target manually."
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:174
 msgid "Select an interface."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:262
 msgid "Send recovery email"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:64
 msgid "Server"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:48
 msgid "Startup grace period"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:365
 msgid "State"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json:9
+msgid "Status"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:80
 msgid "Succeeded"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:155
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:199
 msgid "TCP"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:148
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:226
 msgid "TCP port"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:199
 msgid "TCP port %d"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:76
 msgid "TLS from connection start"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:73
 msgid "TLS mode"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:363
 msgid "Target"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:146
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:364
 msgid "Test"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:123
 msgid "Test email"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:149
 msgid "Test email could not be sent. Check the configuration and system log."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:146
 msgid "Test email sent successfully."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:96
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:124
 msgid "Test failed"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:115
 msgid "Test recipient"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:336
 msgid "The check could not be started. Check the service and system log."
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:98
 msgid "Timed out"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:183
 msgid "Timeout"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:217
 msgid "Unknown"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:80
 msgid "Username"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:118
+msgid "Wi-Fi AP down"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:19
 msgid "Wi-Fi APs / SSIDs"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:120
+msgid "Wi-Fi initialization failed"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:116
+msgid "Wi-Fi radio down"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:18
 msgid "Wi-Fi radios"
 msgstr ""

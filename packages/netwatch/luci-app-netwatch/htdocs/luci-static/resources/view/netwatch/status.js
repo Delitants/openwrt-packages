@@ -10,6 +10,10 @@ const callStatus = rpc.declare({
 	object: 'netwatch', method: 'status', expect: { '': {} }
 });
 
+const callInterfaces = rpc.declare({
+	object: 'netwatch', method: 'interfaces', expect: { '': {} }, reject: true
+});
+
 const callCheck = rpc.declare({
 	object: 'netwatch', method: 'check', params: [ 'id' ]
 });
@@ -30,6 +34,45 @@ function configuredText(value, fallback) {
 function finiteNumber(value, minimum, maximum) {
 	return typeof(value) === 'number' && isFinite(value) &&
 		value >= minimum && value <= maximum;
+}
+
+function interfaceSelector(value) {
+	return typeof(value) === 'string' && value.length <= 96 &&
+		/^(network|device|wifi-radio|wifi-iface):[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(value);
+}
+
+function inventoryBySelector(inventory) {
+	const output = Object.create(null);
+
+	for (const group of inventory && Array.isArray(inventory.groups) ? inventory.groups : []) {
+		for (const item of group && Array.isArray(group.items) ? group.items : []) {
+			if (!item || typeof(item) !== 'object' || !interfaceSelector(item.selector))
+				continue;
+
+			output[item.selector] = {
+				label: configuredText(item.label, ''),
+				live_device: configuredText(item.live_device, '')
+			};
+		}
+	}
+
+	return output;
+}
+
+function interfaceIdentity(monitor, result, candidates) {
+	const rawSelector = monitor && monitor.interface_selector;
+	const selector = configuredText(rawSelector, _('Not configured'));
+	const candidate = interfaceSelector(rawSelector) && candidates &&
+		typeof(candidates) === 'object' &&
+		Object.prototype.hasOwnProperty.call(candidates, rawSelector)
+		? candidates[rawSelector] : null;
+	const label = configuredText(candidate && candidate.label,
+		configuredText(result && result.label, selector));
+	const live = configuredText(result && result.live_device,
+		configuredText(candidate && candidate.live_device, ''));
+
+	return live ? '%s — %s (%s)'.format(label, selector, live) :
+		'%s — %s'.format(label, selector);
 }
 
 function reasonLabel(reason, succeeded) {
@@ -59,6 +102,24 @@ function reasonLabel(reason, succeeded) {
 		return _('Connection refused');
 	case 'connect_failed':
 		return _('Connection failed');
+	case 'administratively_disabled':
+		return _('Administratively disabled');
+	case 'interface_absent':
+		return _('Interface absent');
+	case 'unavailable':
+		return _('Interface unavailable');
+	case 'link_down':
+		return _('Link down');
+	case 'carrier_lost':
+		return _('Carrier lost');
+	case 'wireless_radio_down':
+		return _('Wi-Fi radio down');
+	case 'wireless_ap_down':
+		return _('Wi-Fi AP down');
+	case 'wireless_initialization_failed':
+		return _('Wi-Fi initialization failed');
+	case 'status_unavailable':
+		return _('Interface status unavailable');
 	default:
 		return _('Test failed');
 	}
@@ -99,20 +160,41 @@ function formatTcpResult(monitor, result) {
 	return _('%s: %s').format(prefix, reason);
 }
 
+function formatInterfaceResult(result) {
+	if (!result || typeof(result) !== 'object' || Array.isArray(result))
+		return _('No result');
+
+	const parts = [ reasonLabel(result.reason, result.ok === true) ];
+	const summary = configuredText(result.summary, '');
+	if (summary)
+		parts.push(summary);
+
+	if (result.evidence && typeof(result.evidence) === 'object' &&
+		!Array.isArray(result.evidence)) {
+		for (const key of [ 'operstate', 'carrier', 'radio_up', 'present' ]) {
+			const value = key === 'operstate'
+				? configuredText(result.evidence[key], '')
+				: typeof(result.evidence[key]) === 'boolean'
+					? String(result.evidence[key]) : '';
+			if (value)
+				parts.push('%s=%s'.format(key, value));
+		}
+	}
+
+	return parts.join('; ');
+}
+
 function formatResult(monitor, state) {
 	const result = state && typeof(state.last_result) === 'object'
-		? state.last_result
-		: null;
-
-	return monitor.type === 'tcp'
-		? formatTcpResult(monitor, result)
-		: formatPingResult(result);
+		? state.last_result : null;
+	if (monitor.type === 'interface') return formatInterfaceResult(result);
+	if (monitor.type === 'tcp') return formatTcpResult(monitor, result);
+	return formatPingResult(result);
 }
 
 function formatTest(monitor) {
-	if (monitor.type !== 'tcp')
-		return _('Ping');
-
+	if (monitor.type === 'interface') return _('Interface state');
+	if (monitor.type !== 'tcp') return _('Ping');
 	const port = monitorPort(monitor);
 	return port == null ? _('TCP') : _('TCP port %d').format(port);
 }
@@ -124,8 +206,11 @@ function formatTimestamp(value, emptyLabel) {
 	return new Date(value * 1000).toLocaleString();
 }
 
-function formatEmails(value) {
-	return finiteNumber(value, 0, 1000000) ? String(Math.floor(value)) : '0';
+function formatEmails(value, cap) {
+	const sent = finiteNumber(value, 0, 1000000) ? Math.floor(value) : 0;
+	const maximum = Number(cap);
+	return '%d / %d'.format(sent,
+		Number.isInteger(maximum) && maximum >= 1 && maximum <= 1000 ? maximum : 1);
 }
 
 function stateBadge(state) {
@@ -165,7 +250,7 @@ function configuredMonitors() {
 	});
 }
 
-function statusRows(status, table, notice) {
+function statusRows(status, candidates, table, notice) {
 	const stateById = Object.create(null);
 	const states = status && Array.isArray(status.monitors) ? status.monitors : [];
 
@@ -188,16 +273,21 @@ function statusRows(status, table, notice) {
 		button.disabled = !canCheck || isChecking;
 		if (isChecking)
 			button.classList.add('spinning');
+		const target = monitor.type === 'interface'
+			? interfaceIdentity(monitor, state && state.last_result, candidates)
+			: configuredText(monitor.target, _('Not configured'));
 
 		return [
 			E('span', {}, configuredText(monitor.name, id)),
-			E('span', {}, configuredText(monitor.target, _('Not configured'))),
+			E('span', {}, target),
 			E('span', {}, formatTest(monitor)),
 			stateBadge(state),
 			E('span', {}, formatTimestamp(state ? state.last_check : null, _('Never'))),
 			E('span', {}, formatResult(monitor, state)),
 			E('span', {}, formatTimestamp(state ? state.incident_started : null, '-')),
-			E('span', {}, formatEmails(state ? state.failure_emails : null)),
+			E('span', {}, formatTimestamp(state ? state.last_transition : null, '-')),
+			E('span', {}, formatEmails(state ? state.failure_emails : null,
+				monitor.max_alerts)),
 			button
 		];
 	});
@@ -213,13 +303,18 @@ function refreshStatus(table, notice, force) {
 	if (!force && hasChecksInFlight())
 		return Promise.resolve();
 
-	return L.resolveDefault(callStatus(), null).then(function(status) {
+	return Promise.all([
+		L.resolveDefault(callStatus(), null),
+		L.resolveDefault(callInterfaces(), { groups: [], errors: [ 'unavailable' ] })
+	]).then(function(data) {
 		if (!force && hasChecksInFlight())
 			return;
 
+		const status = data[0];
+		const candidates = inventoryBySelector(data[1]);
 		const available = !!status && Array.isArray(status.monitors);
 		showAvailability(notice, available);
-		cbi_update_table(table, statusRows(status, table, notice),
+		cbi_update_table(table, statusRows(status, candidates, table, notice),
 			E('em', {}, _('No monitors configured.')));
 	});
 }
@@ -253,12 +348,14 @@ return view.extend({
 	load() {
 		return Promise.all([
 			uci.load('netwatch'),
-			L.resolveDefault(callStatus(), null)
+			L.resolveDefault(callStatus(), null),
+			L.resolveDefault(callInterfaces(), { groups: [], errors: [ 'unavailable' ] })
 		]);
 	},
 
 	render(data) {
 		const initialStatus = data[1];
+		const initialCandidates = inventoryBySelector(data[2]);
 		const notice = E('div');
 		const table = E('table', { 'class': 'table' }, [
 			E('tr', { 'class': 'tr table-titles' }, [
@@ -269,13 +366,14 @@ return view.extend({
 				E('th', { 'class': 'th' }, _('Last check')),
 				E('th', { 'class': 'th' }, _('Result')),
 				E('th', { 'class': 'th' }, _('Incident')),
+				E('th', { 'class': 'th' }, _('Last transition')),
 				E('th', { 'class': 'th' }, _('Emails')),
 				E('th', { 'class': 'th cbi-section-actions' })
 			])
 		]);
 
 		showAvailability(notice, !!initialStatus && Array.isArray(initialStatus.monitors));
-		cbi_update_table(table, statusRows(initialStatus, table, notice),
+		cbi_update_table(table, statusRows(initialStatus, initialCandidates, table, notice),
 			E('em', {}, _('No monitors configured.')));
 
 		poll.add(function() {

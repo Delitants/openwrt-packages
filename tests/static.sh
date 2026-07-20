@@ -16,6 +16,9 @@ require_file packages/netwatch/netwatch/files/etc/config/netwatch
 require_file packages/netwatch/netwatch/files/etc/init.d/netwatch
 require_file packages/netwatch/netwatch/files/usr/share/netwatch/store.uc
 require_file packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc
+require_file packages/netwatch/netwatch/files/usr/share/netwatch/interfaces.uc
+require_file packages/netwatch/netwatch/files/usr/share/netwatch/interface_probe.uc
+require_file packages/netwatch/netwatch/files/usr/share/netwatch/diagnostics.uc
 require_file packages/netwatch/luci-app-netwatch/Makefile
 require_file packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json
 require_file packages/netwatch/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json
@@ -77,6 +80,8 @@ done
 if [ "$fail" -eq 0 ]; then
 	readme="$root/README.md"
 	pot="$root/packages/netwatch/luci-app-netwatch/po/templates/netwatch.pot"
+	menu_catalog="$root/packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json"
+	acl_catalog="$root/packages/netwatch/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json"
 
 	for heading in Requirements Build Install Configure Troubleshooting Upgrade Uninstall; do
 		if ! grep -Fxq -- "## $heading" "$readme"; then
@@ -113,7 +118,8 @@ if [ "$fail" -eq 0 ]; then
 	node - "$pot" \
 		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js" \
 		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js" \
-		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js" <<'NODE' || fail=1
+		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js" \
+		"$menu_catalog" "$acl_catalog" <<'NODE' || fail=1
 const fs = require("fs");
 
 function readString(source, start) {
@@ -260,9 +266,21 @@ function potMsgids(source) {
 }
 
 const expected = new Set();
-for (const file of process.argv.slice(3)) {
+for (const file of process.argv.slice(3, 6)) {
 	for (const value of translationLiterals(fs.readFileSync(file, "utf8")))
 		expected.add(value);
+}
+
+const menu = JSON.parse(fs.readFileSync(process.argv[6], "utf8"));
+for (const entry of Object.values(menu)) {
+	if (typeof entry?.title === "string")
+		expected.add(entry.title);
+}
+
+const acl = JSON.parse(fs.readFileSync(process.argv[7], "utf8"));
+for (const grant of Object.values(acl)) {
+	if (typeof grant?.description === "string")
+		expected.add(grant.description);
 }
 
 const actual = potMsgids(fs.readFileSync(process.argv[2], "utf8"));
@@ -492,7 +510,10 @@ NODE
 			throw new Error("ACL must contain exactly one named grant");
 		const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 		if (!same(grant.read?.uci, ["netwatch"]) ||
-			!same(grant.read?.ubus, { "luci-rpc": ["getDHCPLeases"], netwatch: ["status"] }) ||
+			!same(grant.read?.ubus, {
+				"luci-rpc": ["getDHCPLeases"],
+				netwatch: ["status", "interfaces"]
+			}) ||
 			!same(grant.write?.uci, ["netwatch"]) ||
 			!same(grant.write?.ubus, { netwatch: ["check", "test_email"] }))
 			throw new Error("ACL is not the exact least-privilege Netwatch grant");
@@ -529,6 +550,7 @@ NODE
 
 	for declaration in \
 		"object: 'netwatch', method: 'status', expect: { '': {} }" \
+		"object: 'netwatch', method: 'interfaces', expect: { '': {} }" \
 		"object: 'netwatch', method: 'check', params: [ 'id' ]" \
 		"uci.load('netwatch')" \
 		"uci.sections('netwatch', 'monitor')" \
@@ -539,6 +561,7 @@ NODE
 		"_('Test')" \
 		"_('State')" \
 		"_('Last check')" \
+		"_('Last transition')" \
 		"_('Result')" \
 		"_('Incident')" \
 		"_('Emails')" \
@@ -548,7 +571,22 @@ NODE
 		"_('Failed')" \
 		"_('Disabled')" \
 		"_('Invalid configuration')" \
+		"_('Administratively disabled')" \
+		"_('Interface absent')" \
+		"_('Interface unavailable')" \
+		"_('Link down')" \
+		"_('Carrier lost')" \
+		"_('Wi-Fi radio down')" \
+		"_('Wi-Fi AP down')" \
+		"_('Wi-Fi initialization failed')" \
+		"_('Interface status unavailable')" \
 		"_('Check now')" \
+		'function inventoryBySelector' \
+		'function interfaceIdentity' \
+		'function formatInterfaceResult' \
+		'function formatEmails(value, cap)' \
+		'state.last_transition' \
+		'monitor.max_alerts' \
 		"classList.add('spinning')" \
 		'button.disabled = true;' \
 		'callCheck(id)' \
@@ -630,17 +668,145 @@ NODE
 			{ id: "beta", status: "healthy" }
 		] };
 
-		let rows = statusRows(status, {}, {});
-		if (!rows[0][8].disabled || !rows[0][8].classList.contains("spinning") ||
-			!rows[1][8].disabled || !rows[1][8].classList.contains("spinning"))
+		let rows = statusRows(status, Object.create(null), {}, {});
+		if (!rows[0][9].disabled || !rows[0][9].classList.contains("spinning") ||
+			!rows[1][9].disabled || !rows[1][9].classList.contains("spinning"))
 			throw new Error("rebuilt status rows must preserve every active check busy state");
 
 		delete checksInFlight.alpha;
-		rows = statusRows(status, {}, {});
-		if (rows[0][8].disabled || rows[0][8].classList.contains("spinning") ||
-			!rows[1][8].disabled || !rows[1][8].classList.contains("spinning"))
+		rows = statusRows(status, Object.create(null), {}, {});
+		if (rows[0][9].disabled || rows[0][9].classList.contains("spinning") ||
+			!rows[1][9].disabled || !rows[1][9].classList.contains("spinning"))
 			throw new Error("completing one check must leave other active rows visibly busy");
 	' "$status" || fail=1
+
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const begin = source.indexOf("function configuredText");
+		const end = source.indexOf("\n\nfunction stateBadge", begin);
+		if (begin < 0 || end < 0)
+			throw new Error("unable to load interface status helpers");
+		String.prototype.format = function(...values) {
+			let index = 0;
+			return this.replace(/%[sd]/g, () => String(values[index++]));
+		};
+		const helpers = Function("_", `${source.slice(begin, end)};
+			return { inventoryBySelector, interfaceIdentity, formatInterfaceResult,
+				formatEmails, formatTimestamp };`)(value => value);
+		const inventory = { groups: [
+			{ items: [
+				{ selector: "device:eth0", label: `Office\u0000${"x".repeat(400)}`,
+					live_device: `eth0\u0007${"y".repeat(400)}` },
+				{ selector: "constructor", label: "prototype pollution" },
+				{ selector: "__proto__", label: "prototype pollution" },
+				{ selector: "device:bad/name", label: "invalid selector" }
+			] },
+			{ items: null }, null
+		] };
+		const candidates = helpers.inventoryBySelector(inventory);
+		if (Object.getPrototypeOf(candidates) !== null || candidates.constructor != null ||
+			candidates.__proto__ != null || candidates["device:bad/name"] != null ||
+			!candidates["device:eth0"])
+			throw new Error("interface candidate map must be prototype-safe and selector-bounded");
+		const identity = helpers.interfaceIdentity(
+			{ interface_selector: "device:eth0" },
+			{ label: `Fallback\u0001${"z".repeat(400)}`, live_device: { secret: true } },
+			candidates);
+		if (/[\x00-\x1f\x7f]/.test(identity) || identity.length > 790 ||
+			identity.includes("[object Object]") || !identity.includes("device:eth0"))
+			throw new Error("interface identity must use bounded normalized scalar text");
+		const result = helpers.formatInterfaceResult({
+			ok: false, reason: "carrier_lost",
+			summary: `carrier unavailable\u0000${"s".repeat(400)}`,
+			evidence: {
+				operstate: `down\u0007${"o".repeat(400)}`, carrier: false,
+				radio_up: { secret: "must not render" }, present: true,
+				secret: "must not render"
+			}
+		});
+		if (!result.startsWith("Carrier lost; ") || /[\x00-\x1f\x7f]/.test(result) ||
+			result.length > 600 || result.includes("secret") ||
+			result.includes("radio_up") || !result.includes("carrier=false") ||
+			!result.includes("present=true"))
+			throw new Error("interface result must render only bounded fixed evidence fields");
+		if (helpers.formatEmails(4.9, 5) !== "4 / 5" ||
+			helpers.formatEmails(-1, 1001) !== "0 / 1" ||
+			helpers.formatEmails(Infinity, "5") !== "0 / 5")
+			throw new Error("email sent/cap values must enforce numeric bounds");
+		if (helpers.formatTimestamp(NaN, "-") !== "-" ||
+			helpers.formatTimestamp(253402300800, "-") !== "-")
+			throw new Error("status timestamps must enforce numeric bounds");
+		if (source.includes("innerHTML"))
+			throw new Error("interface status must not render raw HTML");
+	' "$status" || fail=1
+
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const refresh = source.slice(source.indexOf("function refreshStatus"),
+			source.indexOf("\n\nfunction handleCheckNow"));
+		const load = source.slice(source.indexOf("\tload()"), source.indexOf("\n\n\trender(data)"));
+		if (!refresh.includes("Promise.all([") || !refresh.includes("callStatus()") ||
+			!refresh.includes("callInterfaces()") || !refresh.includes("const status = data[0]") ||
+			!refresh.includes("inventoryBySelector(data[1])") ||
+			!source.includes("L.resolveDefault(callInterfaces(), { groups: [], errors: [ '"'"'unavailable'"'"' ] })"))
+			throw new Error("status refresh must safely load status and interface inventory together");
+		if (!load.includes("uci.load('"'"'netwatch'"'"')") || !load.includes("callStatus()") ||
+			!load.includes("callInterfaces()") || !source.includes("inventoryBySelector(data[2])"))
+			throw new Error("initial status load must include the sanitized interface inventory");
+		const declaration = source.slice(source.indexOf("const callInterfaces"),
+			source.indexOf("const callCheck"));
+		if (!/\breject\s*:\s*true\b/.test(declaration))
+			throw new Error("interface inventory RPC failures must reject into the safe fallback");
+	' "$status" || fail=1
+
+	diagnostics="$root/packages/netwatch/netwatch/files/usr/share/netwatch/diagnostics.uc"
+	for declaration in \
+		"link: '/sbin/ip'" \
+		"iwinfo: '/usr/bin/iwinfo'" \
+		"logread: '/sbin/logread'"
+	do
+		if ! grep -Fq -- "$declaration" "$diagnostics"; then
+			echo "missing fixed diagnostic command gate: $declaration" >&2
+			fail=1
+		fi
+	done
+
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const validator = source.indexOf("function valid_command(name, command)");
+		const adapter = source.indexOf("export function command_output_with(name, command, deps)");
+		const end = source.indexOf("\n\nfunction command_output", adapter);
+		if (validator < 0 || adapter < 0 || end < 0 || validator > adapter)
+			throw new Error("unable to isolate fixed diagnostic command boundary");
+		const validation = source.slice(validator, adapter);
+		const body = source.slice(adapter, end);
+		if (!validation.includes("command == ") ||
+			!validation.includes("/sbin/logread 2>&1") ||
+			!validation.includes("/^\\/sbin\\/ip -details address show dev ") ||
+			!validation.includes("/^\\/usr\\/bin\\/iwinfo ") ||
+			!validation.includes("return safe_device_name(parsed[1])"))
+			throw new Error("diagnostic commands must use exact fixed templates and safe device names");
+		const gate = body.indexOf("if (!path || !valid_command(name, command)) return null;");
+		const stat = body.indexOf("deps.stat(path)", gate);
+		const popen = body.indexOf("deps.popen(command,", stat);
+		if (gate < 0 || stat < 0 || popen < 0 || !(gate < stat && stat < popen))
+			throw new Error("diagnostic command validation and path existence must precede process start");
+	' "$diagnostics" || fail=1
+
+	if grep -ERin --exclude='diagnostics.uc' \
+		'Diagnostic collection incomplete|Recent relevant logs' \
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/store.uc" \
+		"$root/packages/netwatch/luci-app-netwatch/htdocs"; then
+		echo 'full diagnostics escaped the email-only boundary' >&2
+		fail=1
+	fi
+
+	if grep -Ein 'key|password|passphrase|radius_secret|smtp' \
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/interfaces.uc" | \
+		grep -Ev 'SAFE_|secret|allowlist|redact'; then
+		echo 'inventory module contains an unreviewed secret-bearing field' >&2
+		fail=1
+	fi
 
 	node -e '
 		const source = require("fs").readFileSync(process.argv[1], "utf8");
