@@ -52,14 +52,13 @@ package selections cannot leak into the build. The packaging script publishes:
 - `outputs/openwrt-netwatch-1.1.0-source.tar.gz`
 - `outputs/SHA256SUMS`
 
-These are the planned 1.1.0 release outputs. The currently published feed
-remains at `netwatch-1.0.0-r1` and `luci-app-netwatch-1.0.0-r1` until the 1.1.0
-release is built, signed, and published.
+These are the published 1.1.0 release outputs. The signed feed contains
+`netwatch-1.1.0-r1` and `luci-app-netwatch-1.1.0-r1`.
 
 ## Build verification
 
-Release artifacts are built with the pinned OpenWrt 25.12.5 x86/64 SDK and can
-be inspected with its apk-tools 3.0.5. The exact replayable verification is:
+Release artifacts were built with the pinned OpenWrt 25.12.5 x86/64 SDK and
+verified with its apk-tools 3.0.5. The exact replayable verification is:
 
 ```sh
 ./tests/run-unit.sh \

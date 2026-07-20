@@ -210,14 +210,12 @@ const verification = section('Build verification', 'Install');
 const configure = section('Configure', 'Package feed maintenance');
 const errors = [];
 
-if (!build.includes('These are the planned 1.1.0 release outputs.') ||
-	!build.includes('The currently published feed remains at `netwatch-1.0.0-r1` and `luci-app-netwatch-1.0.0-r1` until the 1.1.0 release is built, signed, and published.'))
-	errors.push('README must distinguish planned 1.1.0 outputs from the current 1.0.0-r1 feed');
+if (!build.includes('These are the published 1.1.0 release outputs.') ||
+	!build.includes('The signed feed contains `netwatch-1.1.0-r1` and `luci-app-netwatch-1.1.0-r1`.'))
+	errors.push('README must identify the published 1.1.0 outputs and signed feed versions');
 
-if (!verification.startsWith('## Build verification Release artifacts are built with the pinned OpenWrt 25.12.5 x86/64 SDK and can be inspected with its apk-tools 3.0.5.') ||
-	/\brelease artifacts were built\b/i.test(verification) ||
-	/\b1\.1\.0[^.]*\b(were|have been) (built|inspected)\b/i.test(verification))
-	errors.push('README build verification must be prospective and must not claim unbuilt 1.1.0 artifacts were inspected');
+if (!verification.startsWith('## Build verification Release artifacts were built with the pinned OpenWrt 25.12.5 x86/64 SDK and verified with its apk-tools 3.0.5.'))
+	errors.push('README build verification must record the completed pinned-SDK build and artifact verification');
 
 if (!configure.includes('Every due interface failure email—initial, repeat, or retry when applicable—starts a fresh diagnostic collection. Diagnostic reports are not cached or persisted.') ||
 	!configure.includes('These email-only diagnostics are fresh, bounded, and redacted.'))
