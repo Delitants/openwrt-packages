@@ -35,6 +35,7 @@ require_file scripts/in-sdk.sh
 require_file scripts/build-packages.sh
 require_file scripts/package-output.sh
 require_file scripts/verify-artifacts.sh
+require_file tests/in-sdk-source_test.sh
 require_file tests/package-output_test.sh
 
 for selector in CONFIG_ALL CONFIG_ALL_KMODS CONFIG_ALL_NONSHARED; do
@@ -52,6 +53,7 @@ if grep -Fq -- 'if [ -f .config ]; then' \
 fi
 
 if [ "$fail" -eq 0 ]; then
+	"$root/tests/in-sdk-source_test.sh" || fail=1
 	"$root/tests/package-output_test.sh" || fail=1
 fi
 
