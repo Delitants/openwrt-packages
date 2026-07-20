@@ -6,6 +6,9 @@ import * as uloop from 'uloop';
 import { normalize_global, normalize_smtp, normalize_monitor } from 'config';
 import { new_state, apply_result } from 'state';
 import { due_alert, mail_succeeded, mail_failed } from 'alerts';
+import { start_diagnostics } from 'diagnostics';
+import { render_diagnostic_report } from 'diagnostics';
+import { collect_interface_inventory } from 'interfaces';
 import { render_msmtp, render_message, split_recipients } from 'message';
 import { start_probe } from 'probe';
 import { public_status, write_status } from 'store';
@@ -439,14 +442,15 @@ function start_delivery(message, callback) {
 	return true;
 };
 
-function render_alert(kind, monitor, state, timestamp, recipients) {
+function render_alert(kind, monitor, state, timestamp, recipients, diagnostic) {
 	return render_message(kind, {
 		smtp: smtp_config,
 		recipients,
 		monitor,
 		state,
 		router_hostname: safe_router_hostname(),
-		timestamp
+		timestamp,
+		diagnostic
 	});
 };
 
@@ -456,29 +460,18 @@ function alert_render_failed(state, now, error_text) {
 	persist_status();
 };
 
-function start_alert(monitor, state, kind, now) {
-	if (shutting_down)
-		return false;
-
-	if (!mail_config_ready) {
-		alert_render_failed(state, now, 'mail configuration invalid');
-		return false;
-	}
-
+function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic) {
 	let message;
-	let recipients = monitor.recipients != ''
-		? monitor.recipients
-		: global_config.recipients;
 
 	try {
-		message = render_alert(kind, monitor, state, now, recipients);
+		message = render_alert(kind, monitor, state, now, recipients, diagnostic);
 	}
 	catch (error) {
+		state.mail_busy = false;
 		alert_render_failed(state, now, 'recipient is invalid');
 		return false;
 	}
 
-	state.mail_busy = true;
 	let incident_started = kind == 'failure'
 		? state.incident_started
 		: state.recovery_pending?.incident_started;
@@ -522,6 +515,62 @@ function start_alert(monitor, state, kind, now) {
 	}
 
 	return true;
+};
+
+function start_alert(monitor, state, kind, now) {
+	if (shutting_down)
+		return false;
+
+	if (!mail_config_ready) {
+		alert_render_failed(state, now, 'mail configuration invalid');
+		return false;
+	}
+
+	let recipients = monitor.recipients != ''
+		? monitor.recipients
+		: global_config.recipients;
+	state.mail_busy = true;
+
+	if (monitor.type == 'interface' && kind == 'failure') {
+		let diagnostics_finished = false;
+		let incident_started = state.incident_started;
+		let diagnostic_result = state.last_result;
+
+		log.syslog('info', 'monitor %s diagnostic start selector %s reason %s',
+			monitor.id, monitor.interface_selector,
+			state.last_result?.reason ?? 'unknown');
+
+		let finished = (diagnostic) => {
+			if (diagnostics_finished) return;
+			diagnostics_finished = true;
+
+			if (shutting_down ||
+				!monitor_state_is_current(monitor.id, state) ||
+				monitor_by_id[monitor.id] !== monitor ||
+				state.status != 'failed' ||
+				state.incident_started != incident_started ||
+				state.last_result !== diagnostic_result) {
+				state.mail_busy = false;
+				if (!shutting_down && scheduler)
+					scheduler.set(0);
+				return;
+			}
+
+			log.syslog(diagnostic.incomplete ? 'warning' : 'info',
+				'monitor %s diagnostic collection %s truncated %s', monitor.id,
+				diagnostic.incomplete ? 'incomplete' : 'complete',
+				diagnostic.truncated ? 'yes' : 'no');
+			start_alert_delivery(monitor, state, kind, now, recipients, diagnostic);
+		};
+
+		if (!start_diagnostics(monitor, state.last_result, finished))
+			finished(render_diagnostic_report([], [
+				'Diagnostic collection incomplete: unable to start collector'
+			]));
+		return true;
+	}
+
+	return start_alert_delivery(monitor, state, kind, now, recipients, null);
 };
 
 function scheduler_tick() {
@@ -643,6 +692,15 @@ function request_check(request) {
 	}
 };
 
+function request_interfaces(request) {
+	try {
+		return collect_interface_inventory();
+	}
+	catch (error) {
+		return { groups: [], errors: [ 'interface inventory unavailable' ] };
+	}
+};
+
 function test_message(recipients, now) {
 	let state = new_state('test');
 
@@ -742,6 +800,10 @@ let service_object = conn.publish('netwatch', {
 		args: {},
 		call: (request) => public_status(
 			daemon_started, last_reload, mail_error, states)
+	},
+	interfaces: {
+		args: {},
+		call: request_interfaces
 	},
 	check: {
 		args: { id: '' },

@@ -330,6 +330,69 @@ NODE
 		fi
 	done
 
+	for declaration in \
+		"import { collect_interface_inventory } from 'interfaces';" \
+		"import { start_diagnostics } from 'diagnostics';" \
+		'interfaces:' \
+		'call: request_interfaces' \
+		'start_diagnostics(monitor, state.last_result' \
+		'diagnostic start selector' \
+		"Diagnostic collection incomplete"
+	do
+		if ! grep -Fq -- "$declaration" \
+			"$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+			echo "missing interface daemon declaration: $declaration" >&2
+			fail=1
+		fi
+	done
+
+	if grep -Fq 'diagnostic:' \
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/store.uc"; then
+		echo 'full diagnostic report is exposed through status' >&2
+		fail=1
+	fi
+
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const begin = source.indexOf("function start_alert(monitor, state, kind, now)");
+		const end = source.indexOf("\n\nfunction scheduler_tick", begin);
+		const body = source.slice(begin, end);
+		const claim = body.indexOf("state.mail_busy = true;");
+		const guard = body.indexOf("monitor.type == ");
+		const kindGuard = body.indexOf("kind == ", guard);
+		const collect = body.indexOf("start_diagnostics(monitor, state.last_result", guard);
+		const fallback = body.indexOf("Diagnostic collection incomplete", collect);
+		const deliver = body.indexOf("start_alert_delivery(monitor, state, kind, now, recipients", guard);
+		if (begin < 0 || end < 0 ||
+			![claim, guard, kindGuard, collect, fallback, deliver].every(value => value >= 0) ||
+			!(claim < guard && guard < kindGuard && kindGuard < collect && collect < fallback))
+			throw new Error("interface diagnostics must be fresh, guarded, and fall back to delivery");
+		if (source.indexOf("function start_alert_delivery") < 0 ||
+			source.indexOf("start_delivery(message", source.indexOf("function start_alert_delivery")) < 0)
+			throw new Error("diagnostic completion must reach the existing bounded mail delivery path");
+	' "$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc" || fail=1
+
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const begin = source.indexOf("function start_alert(monitor, state, kind, now)");
+		const end = source.indexOf("\n\nfunction scheduler_tick", begin);
+		const body = source.slice(begin, end);
+		const callback = body.indexOf("let finished = (diagnostic) => {");
+		const onceGuard = body.indexOf("if (diagnostics_finished) return;", callback);
+		const onceClaim = body.indexOf("diagnostics_finished = true;", onceGuard);
+		const monitorGuard = body.indexOf("monitor_by_id[monitor.id] !== monitor", onceClaim);
+		const incidentGuard = body.indexOf("state.incident_started != incident_started", monitorGuard);
+		const resultGuard = body.indexOf("state.last_result !== diagnostic_result", incidentGuard);
+		const release = body.indexOf("state.mail_busy = false;", monitorGuard);
+		const deliver = body.indexOf("start_alert_delivery(monitor, state, kind, now, recipients", resultGuard);
+		if (![callback, onceGuard, onceClaim, monitorGuard, incidentGuard,
+			resultGuard, release, deliver].every(value => value >= 0) ||
+			!(callback < onceGuard && onceGuard < onceClaim && onceClaim < monitorGuard &&
+				monitorGuard < incidentGuard && incidentGuard < resultGuard &&
+				resultGuard < release && release < deliver))
+			throw new Error("diagnostic callbacks must be once-only and reject stale monitor incidents before delivery");
+	' "$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc" || fail=1
+
 	if grep -ERn '(^|[^[:alnum:]_])(system|eval)[[:space:]]*\(' \
 		"$root/packages/netwatch/netwatch/files/usr/share/netwatch"; then
 		echo 'unsafe command execution primitive found' >&2
