@@ -52,6 +52,9 @@ equal(result('device:eth0', { ...base, runtime: { ...base.runtime,
 equal(result('device:eth0', { ...base, runtime: { ...base.runtime,
 	devices: { eth0: { present: true, up: true, carrier: false, operstate: 'up' } } } }).reason,
 	'carrier_lost', 'carrier loss detected');
+equal(result('device:eth0', { ...base, runtime: { ...base.runtime,
+	devices: { eth0: { present: true, up: true, carrier: true, operstate: 'dormant' } } } }).reason,
+	'link_down', 'dormant device is not operationally up');
 equal(result('wifi-radio:radio0', { ...base, runtime: { ...base.runtime,
 	wireless: { radio0: { up: false, pending: false, disabled: false,
 		retry_setup_failed: false, interfaces: [] } } } }).reason,
@@ -60,6 +63,10 @@ equal(result('wifi-iface:office', { ...base, runtime: { ...base.runtime,
 	wireless: { radio0: { up: true, pending: false, disabled: false,
 		retry_setup_failed: false, interfaces: [] } } } }).reason,
 	'wireless_ap_down', 'AP down detected');
+equal(result('wifi-iface:office', { ...base, runtime: { ...base.runtime,
+	devices: { ...base.runtime.devices,
+		'phy0-ap0': { present: true, up: true, carrier: true, operstate: 'testing' } } } }).reason,
+	'wireless_ap_down', 'testing AP device is not operationally up');
 equal(result('wifi-radio:radio0', { ...base, runtime: { ...base.runtime,
 	wireless: { radio0: { up: false, pending: false, disabled: false,
 		retry_setup_failed: true, interfaces: [] } } } }).reason,

@@ -41,7 +41,7 @@ function source_available(snapshot, source) {
 };
 
 function operstate_down(value) {
-	return value in [ 'down', 'lowerlayerdown', 'notpresent' ];
+	return value in [ 'down', 'lowerlayerdown', 'notpresent', 'dormant', 'testing' ];
 };
 
 function device_facts(snapshot, name) {
@@ -158,8 +158,7 @@ export function evaluate_interface(selector, snapshot, observed_at) {
 		if (facts.present === false)
 			return answer(false, 'interface_absent',
 				'device is not present', parsed, candidate, observed_at, evidence);
-		if ((facts.up === false && facts.operstate == 'up') ||
-			(facts.up === true && operstate_down(facts.operstate)))
+		if (facts.up === false && facts.operstate == 'up')
 			return answer(false, 'status_unavailable',
 				'device operational state is contradictory', parsed, candidate, observed_at, evidence);
 		if (operstate_down(facts.operstate) || facts.up === false)
@@ -259,8 +258,7 @@ export function evaluate_interface(selector, snapshot, observed_at) {
 	if (runtime_radio.up !== true || live.present == null)
 		return answer(false, 'status_unavailable',
 			'wireless AP state is indeterminate', parsed, candidate, observed_at, evidence);
-	if ((live.up === false && live.operstate == 'up') ||
-		(live.up === true && operstate_down(live.operstate)))
+	if (live.up === false && live.operstate == 'up')
 		return answer(false, 'status_unavailable',
 			'wireless AP device state is contradictory', parsed, candidate, observed_at, evidence);
 	if (live.present === false || live.up === false || operstate_down(live.operstate))

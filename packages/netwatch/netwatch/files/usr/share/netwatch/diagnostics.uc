@@ -82,6 +82,8 @@ function redact_private_keys(value) {
 export function redact_diagnostic_text(value) {
 	value = redact_private_keys(clean_text(value));
 	for (let pattern in [
+		/(\b(option|list)[ \t]+(key|password|passphrase|(wpa_)?psk|sae(_password)?|radius(_secret|_key|_password)?|smtp(_password|_pass)?|secret|credential|token|api_key|private_key|privatekey)[ \t]+)[^\n]*/gi,
+		/(\b(key|password|passphrase|(wpa_)?psk|sae(_password)?|radius(_secret|_key|_password)?|smtp(_password|_pass)?|secret|credential|token|api_key|private_key|privatekey)[ \t]+)[^\n]*/gi,
 		/(\b(key|password|passphrase|(wpa_)?psk|sae(_password)?|radius(_secret|_key|_password)?|smtp(_password|_pass)?|secret|credential|token|api_key|private_key|privatekey)\s*[:=]\s*)[^\n]*/gi,
 		/("(key|password|passphrase|(wpa_)?psk|sae(_password)?|radius(_secret|_key|_password)?|smtp(_password|_pass)?|secret|credential|token|api_key|private_key|privatekey)"\s*:\s*)[^\n]*/gi,
 		/((authorization|proxy-authorization)\s*:\s*)[^\n]+/gi,
@@ -107,7 +109,11 @@ function truncate_text(value, maximum, marker) {
 function newest_lines(value, maximum) {
 	let values = split(clean_text(value), '\n');
 	let truncated = length(values) > maximum;
-	if (truncated) values = slice(values, length(values) - maximum);
+	if (truncated) {
+		let newest = slice(values, length(values) - maximum);
+		values = [ '[older relevant log lines omitted]' ];
+		for (let line in newest) push(values, line);
+	}
 	return { text: join('\n', values), truncated };
 };
 

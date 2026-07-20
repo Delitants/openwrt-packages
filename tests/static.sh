@@ -713,7 +713,9 @@ NODE
 		"_('Last check')" \
 		"_('Last transition')" \
 		"_('Result')" \
+		"_('Failures')" \
 		"_('Incident')" \
+		"_('Duration')" \
 		"_('Emails')" \
 		"_('Unknown')" \
 		"_('Healthy')" \
@@ -734,7 +736,11 @@ NODE
 		'function inventoryBySelector' \
 		'function interfaceIdentity' \
 		'function formatInterfaceResult' \
+		'function formatFailures(value, threshold)' \
+		'function formatIncidentDuration(state)' \
 		'function formatEmails(value, cap)' \
+		'state.consecutive_failures' \
+		'state.config_error' \
 		'state.last_transition' \
 		'monitor.max_alerts' \
 		"classList.add('spinning')" \
@@ -806,12 +812,13 @@ NODE
 		const statusRows = Function(
 			"checksInFlight", "configuredMonitors", "E", "configuredText",
 			"formatTest", "stateBadge", "formatTimestamp", "formatResult",
-			"formatEmails", "handleCheckNow", "_",
+			"formatFailures", "formatIncidentDuration", "formatEmails",
+			"handleCheckNow", "_",
 			`${source.slice(begin, end)}; return statusRows;`
 		)(
 			checksInFlight, () => monitors, E, (value, fallback) => value || fallback,
 			() => "test", () => "state", () => "time", () => "result",
-			() => "0", () => {}, value => value
+			() => "0", () => "duration", () => "0", () => {}, value => value
 		);
 		const status = { monitors: [
 			{ id: "alpha", status: "healthy" },
@@ -819,14 +826,14 @@ NODE
 		] };
 
 		let rows = statusRows(status, Object.create(null), {}, {});
-		if (!rows[0][9].disabled || !rows[0][9].classList.contains("spinning") ||
-			!rows[1][9].disabled || !rows[1][9].classList.contains("spinning"))
+		if (!rows[0][11].disabled || !rows[0][11].classList.contains("spinning") ||
+			!rows[1][11].disabled || !rows[1][11].classList.contains("spinning"))
 			throw new Error("rebuilt status rows must preserve every active check busy state");
 
 		delete checksInFlight.alpha;
 		rows = statusRows(status, Object.create(null), {}, {});
-		if (rows[0][9].disabled || rows[0][9].classList.contains("spinning") ||
-			!rows[1][9].disabled || !rows[1][9].classList.contains("spinning"))
+		if (rows[0][11].disabled || rows[0][11].classList.contains("spinning") ||
+			!rows[1][11].disabled || !rows[1][11].classList.contains("spinning"))
 			throw new Error("completing one check must leave other active rows visibly busy");
 	' "$status" || fail=1
 
@@ -842,7 +849,8 @@ NODE
 		};
 		const helpers = Function("_", `${source.slice(begin, end)};
 			return { inventoryBySelector, interfaceIdentity, formatInterfaceResult,
-				formatEmails, formatTimestamp };`)(value => value);
+				formatFailures, formatIncidentDuration, formatEmails,
+				formatResult, formatTimestamp };`)(value => value);
 		const inventory = { groups: [
 			{ items: [
 				{ selector: "device:eth0", label: `Office\u0000${"x".repeat(400)}`,
@@ -883,6 +891,24 @@ NODE
 			helpers.formatEmails(-1, 1001) !== "0 / 1" ||
 			helpers.formatEmails(Infinity, "5") !== "0 / 5")
 			throw new Error("email sent/cap values must enforce numeric bounds");
+		if (helpers.formatFailures(2.9, 3) !== "2 / 3" ||
+			helpers.formatFailures(-1, 1001) !== "0 / 3" ||
+			helpers.formatFailures(Infinity, "5") !== "0 / 5")
+			throw new Error("failure count/threshold values must enforce numeric bounds");
+		const now = Math.floor(Date.now() / 1000);
+		const duration = helpers.formatIncidentDuration({
+			status: "failed", incident_started: now - 3661
+		});
+		if (duration !== "1h 1m" ||
+			helpers.formatIncidentDuration({ status: "healthy", incident_started: now - 60 }) !== "-" ||
+			helpers.formatIncidentDuration({ status: "failed", incident_started: Infinity }) !== "-")
+			throw new Error("incident duration must be bounded and shown only for live failures");
+		const configResult = helpers.formatResult({ type: "interface" }, {
+			config_error: "bad\u0000setting", last_result: { summary: "must not render" }
+		});
+		if (configResult !== "Configuration error: bad setting" ||
+			configResult.includes("must not render"))
+			throw new Error("configuration errors must render as bounded normalized status detail");
 		if (helpers.formatTimestamp(NaN, "-") !== "-" ||
 			helpers.formatTimestamp(253402300800, "-") !== "-")
 			throw new Error("status timestamps must enforce numeric bounds");

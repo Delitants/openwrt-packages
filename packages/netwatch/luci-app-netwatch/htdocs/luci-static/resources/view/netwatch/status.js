@@ -185,6 +185,10 @@ function formatInterfaceResult(result) {
 }
 
 function formatResult(monitor, state) {
+	const configError = configuredText(state && state.config_error, '');
+	if (configError)
+		return _('Configuration error: %s').format(configError);
+
 	const result = state && typeof(state.last_result) === 'object'
 		? state.last_result : null;
 	if (monitor.type === 'interface') return formatInterfaceResult(result);
@@ -211,6 +215,37 @@ function formatEmails(value, cap) {
 	const maximum = Number(cap);
 	return '%d / %d'.format(sent,
 		Number.isInteger(maximum) && maximum >= 1 && maximum <= 1000 ? maximum : 1);
+}
+
+function formatFailures(value, threshold) {
+	const failures = finiteNumber(value, 0, 1000000) ? Math.floor(value) : 0;
+	const maximum = Number(threshold);
+	return '%d / %d'.format(failures,
+		Number.isInteger(maximum) && maximum >= 1 && maximum <= 100 ? maximum : 3);
+}
+
+function formatDuration(seconds) {
+	seconds = Math.max(0, Math.floor(seconds));
+	const days = Math.floor(seconds / 86400);
+	const hours = Math.floor(seconds % 86400 / 3600);
+	const minutes = Math.floor(seconds % 3600 / 60);
+	const remainder = seconds % 60;
+
+	if (days)
+		return hours ? _('%dd %dh').format(days, hours) : _('%dd').format(days);
+	if (hours)
+		return minutes ? _('%dh %dm').format(hours, minutes) : _('%dh').format(hours);
+	if (minutes)
+		return remainder ? _('%dm %ds').format(minutes, remainder) : _('%dm').format(minutes);
+	return _('%ds').format(remainder);
+}
+
+function formatIncidentDuration(state) {
+	if (!state || state.status !== 'failed' ||
+		!finiteNumber(state.incident_started, 1, 253402300799))
+		return '-';
+
+	return formatDuration(Date.now() / 1000 - state.incident_started);
 }
 
 function stateBadge(state) {
@@ -284,7 +319,10 @@ function statusRows(status, candidates, table, notice) {
 			stateBadge(state),
 			E('span', {}, formatTimestamp(state ? state.last_check : null, _('Never'))),
 			E('span', {}, formatResult(monitor, state)),
+			E('span', {}, formatFailures(state ? state.consecutive_failures : null,
+				monitor.failures)),
 			E('span', {}, formatTimestamp(state ? state.incident_started : null, '-')),
+			E('span', {}, formatIncidentDuration(state)),
 			E('span', {}, formatTimestamp(state ? state.last_transition : null, '-')),
 			E('span', {}, formatEmails(state ? state.failure_emails : null,
 				monitor.max_alerts)),
@@ -365,7 +403,9 @@ return view.extend({
 				E('th', { 'class': 'th' }, _('State')),
 				E('th', { 'class': 'th' }, _('Last check')),
 				E('th', { 'class': 'th' }, _('Result')),
+				E('th', { 'class': 'th' }, _('Failures')),
 				E('th', { 'class': 'th' }, _('Incident')),
+				E('th', { 'class': 'th' }, _('Duration')),
 				E('th', { 'class': 'th' }, _('Last transition')),
 				E('th', { 'class': 'th' }, _('Emails')),
 				E('th', { 'class': 'th cbi-section-actions' })

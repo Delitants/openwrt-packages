@@ -55,6 +55,9 @@ let adversarial_text = 'private_key=private-alias-secret\r\n' +
 	'radius_password=radius-password-secret\nsmtp_pass=smtp-pass-secret\n' +
 	'secret=generic-secret\ncredential=credential-secret\n' +
 	'token=token-secret\napi_key=api-key-secret\n' +
+	"option key 'uci-option-secret'\nlist sae_password 'uci-list-secret'\n" +
+	"key 'quoted-whitespace-secret'\npassphrase whitespace-passphrase-secret\n" +
+	'psk whitespace-secret\npassword bare-whitespace-secret\n' +
 	'Proxy-Authorization: Basic proxy-header-secret\n' +
 	'"Authorization":"Bearer json-bearer-secret"\n' +
 	'"proxy-authorization":"Bearer json-proxy-secret"\n' +
@@ -68,6 +71,9 @@ for (let secret in [ 'private-alias-secret', 'json-bearer-secret',
 	'passphrase-secret', 'wpa-secret', 'sae-password-secret',
 	'radius-secret-value', 'radius-password-secret', 'smtp-pass-secret',
 	'generic-secret', 'credential-secret', 'token-secret', 'api-key-secret',
+	'uci-option-secret', 'uci-list-secret', 'whitespace-secret',
+	'quoted-whitespace-secret', 'whitespace-passphrase-secret',
+	'bare-whitespace-secret',
 	'proxy-header-secret', 'json-proxy-secret', 'escaped', 'quote-secret',
 	'alpha', 'beta', 'gamma',
 	'pem-line-one-secret', 'pem-line-two-secret' ])
@@ -88,6 +94,8 @@ truthy(length(bounded.text) <= 65536, 'report bounded to 64 KiB');
 truthy(bounded.truncated, 'truncation reported');
 truthy(bounded.incomplete, 'source error marks report incomplete');
 equal(match(bounded.text, /netifd line 0\n/), null, 'old log lines discarded');
+truthy(match(bounded.text, /\[older relevant log lines omitted\]/),
+	'email marks omitted older relevant log lines');
 truthy(match(bounded.text, /netifd line 259/), 'newest log line retained');
 
 let long_error = render_diagnostic_report([], [ repeated('x', 600) ]);
