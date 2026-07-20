@@ -21,6 +21,9 @@ if [ ! -f "$archive_path" ]; then
 	exit 1
 fi
 
+mkdir -p "$root/work/sdk/bin/packages"
+sdk_export=$(CDPATH= cd -- "$root/work/sdk" && pwd -P)
+
 docker image inspect "$image" >/dev/null 2>&1 || \
 	docker build --platform linux/amd64 -t "$image" "$root/tools/sdk"
 
@@ -28,6 +31,7 @@ exec docker run --rm --name "$container" --platform linux/amd64 \
 	--mount "type=bind,src=$root,dst=/src" \
 	--mount "type=volume,src=$volume,dst=/sdk" \
 	--mount "type=bind,src=$archive_path,dst=/sdk-archive/$archive,readonly" \
+	--mount "type=bind,src=$sdk_export,dst=/sdk-export" \
 	-w /src "$image" sh -eu -c '
 	version=$1
 	archive=$2
@@ -35,11 +39,12 @@ exec docker run --rm --name "$container" --platform linux/amd64 \
 	shift 3
 	archive_path=/sdk-archive/$archive
 	stamp=/sdk/.netwatch-sdk-$version-$sha256
-	export_dir=/src/work/sdk/bin/packages
+	export_dir=/sdk-export/bin/packages
 
 	if [ ! -f "$stamp" ] ||
 		[ ! -x /sdk/scripts/feeds ] ||
-		[ ! -x /sdk/staging_dir/host/bin/apk ]; then
+		[ ! -x /sdk/staging_dir/host/bin/apk ] ||
+		[ ! -d /sdk/bin/packages ]; then
 		printf '\''%s  %s\n'\'' "$sha256" "$archive_path" | sha256sum -c -
 		find /sdk -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 		tar --zstd -xf "$archive_path" -C /sdk --strip-components=1
@@ -54,6 +59,7 @@ exec docker run --rm --name "$container" --platform linux/amd64 \
 			fi
 		done
 
+		mkdir -p /sdk/bin/packages
 		: > "$stamp"
 	fi
 
