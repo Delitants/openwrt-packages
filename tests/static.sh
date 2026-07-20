@@ -14,11 +14,12 @@ require_file() {
 require_file packages/netwatch/netwatch/Makefile
 require_file packages/netwatch/netwatch/files/etc/config/netwatch
 require_file packages/netwatch/netwatch/files/etc/init.d/netwatch
-require_file packages/netwatch/netwatch/files/usr/share/netwatch/store.uc
-require_file packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc
-require_file packages/netwatch/netwatch/files/usr/share/netwatch/interfaces.uc
-require_file packages/netwatch/netwatch/files/usr/share/netwatch/interface_probe.uc
-require_file packages/netwatch/netwatch/files/usr/share/netwatch/diagnostics.uc
+for module in \
+	alerts config diagnostics interface_probe interfaces message netwatchd ping \
+	probe result state store
+do
+	require_file "packages/netwatch/netwatch/files/usr/share/netwatch/$module.uc"
+done
 require_file packages/netwatch/luci-app-netwatch/Makefile
 require_file packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json
 require_file packages/netwatch/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json
@@ -70,12 +71,75 @@ if ! awk '
 	fail=1
 fi
 
-for declaration in 'PKG_VERSION:=1.0.0' 'PKG_RELEASE:=1'; do
-	if ! grep -Fq -- "$declaration" "$root/packages/netwatch/luci-app-netwatch/Makefile"; then
-		echo "missing LuCI version declaration: $declaration" >&2
+for makefile in \
+	packages/netwatch/netwatch/Makefile \
+	packages/netwatch/luci-app-netwatch/Makefile
+do
+	for declaration in 'PKG_VERSION:=1.1.0' 'PKG_RELEASE:=1'; do
+		if ! grep -Fq -- "$declaration" "$root/$makefile"; then
+			echo "missing package version declaration in $makefile: $declaration" >&2
+			fail=1
+		fi
+	done
+done
+
+if grep -Eq '(^|[[:space:]])\+iwinfo([[:space:]]|$)' \
+	"$root/packages/netwatch/netwatch/Makefile"; then
+	echo 'runtime package has a hard iwinfo dependency' >&2
+	fail=1
+fi
+
+for metadata in \
+	'TITLE:=Lightweight host, TCP service, and network-interface monitor' \
+	'Monitor hosts, TCP services, and network interfaces' \
+	'LUCI_TITLE:=LuCI support for Netwatch host, TCP service, and interface monitoring'
+do
+	if ! grep -FRq -- "$metadata" \
+		"$root/packages/netwatch/netwatch/Makefile" \
+		"$root/packages/netwatch/luci-app-netwatch/Makefile"; then
+		echo "missing release package metadata: $metadata" >&2
 		fail=1
 	fi
 done
+
+for expectation in \
+	'runtime=outputs/netwatch_1.1.0-r1_all.apk' \
+	'luci=outputs/luci-app-netwatch_1.1.0-r1_all.apk' \
+	'source_archive=outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
+	'.info.version == "1.1.0-r1"' \
+	'openwrt-netwatch-1.1.0/README.md'
+do
+	if ! grep -Fq -- "$expectation" "$root/scripts/verify-artifacts.sh"; then
+		echo "missing artifact verification expectation: $expectation" >&2
+		fail=1
+	fi
+done
+
+for module in \
+	alerts config diagnostics interface_probe interfaces message netwatchd ping \
+	probe result state store
+do
+	if ! grep -Fq -- "usr/share/netwatch/$module.uc" \
+		"$root/scripts/verify-artifacts.sh"; then
+		echo "artifact verifier is missing runtime module: $module.uc" >&2
+		fail=1
+	fi
+done
+
+runtime_manifest_count=$(awk '
+	/^[[:space:]]*'\''etc\/config\/netwatch'\''/ { runtime = 1 }
+	runtime && /^[[:space:]]*'\''[^'\'']+'\''/ { count++ }
+	runtime && /runtime-files\.expected/ { print count; exit }
+' "$root/scripts/verify-artifacts.sh")
+luci_manifest_count=$(awk '
+	/^[[:space:]]*'\''lib\/apk\/packages\/luci-app-netwatch\.list'\''/ { luci = 1 }
+	luci && /^[[:space:]]*'\''[^'\'']+'\''/ { count++ }
+	luci && /luci-files\.expected/ { print count; exit }
+' "$root/scripts/verify-artifacts.sh")
+if [ "$runtime_manifest_count" != 17 ] || [ "$luci_manifest_count" != 7 ]; then
+	echo "artifact manifest counts are not exactly 17 runtime and 7 LuCI paths: $runtime_manifest_count/$luci_manifest_count" >&2
+	fail=1
+fi
 
 if [ "$fail" -eq 0 ]; then
 	readme="$root/README.md"
@@ -93,20 +157,31 @@ if [ "$fail" -eq 0 ]; then
 	for text in \
 		'OpenWrt 25.12.5' \
 		'x86/64' \
-		'outputs/netwatch_1.0.0-r1_all.apk' \
-		'outputs/luci-app-netwatch_1.0.0-r1_all.apk' \
+		'outputs/netwatch_1.1.0-r1_all.apk' \
+		'outputs/luci-app-netwatch_1.1.0-r1_all.apk' \
+		'outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
+		'17 runtime manifest paths' \
+		'exactly seven LuCI manifest paths' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/keys/netwatch-local.pem' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/feed/x86_64/packages.adb' \
 		'/etc/apk/repositories.d/customfeeds.list' \
 		'apk add netwatch luci-app-netwatch' \
 		'./scripts/rebuild-feed.sh x86_64 work/signing/private-key.pem' \
 		'Services > Netwatch' \
+		"uci set netwatch.office_wifi.type='interface'" \
+		"uci set netwatch.office_wifi.interface_selector='wifi-iface:office'" \
+		'network:, device:, wifi-radio:, and wifi-iface:' \
+		'disabled or absent' \
+		'fresh, bounded, and redacted' \
+		'optional iwinfo' \
 		'port 587 with STARTTLS' \
 		'port 465 with implicit TLS' \
 		'Active incidents and their email counters reset after a router reboot.' \
 		'/etc/init.d/netwatch restart' \
 		'ubus call netwatch status' \
+		'ubus call netwatch interfaces' \
 		'logread -e netwatch' \
+		'apk upgrade netwatch luci-app-netwatch' \
 		'apk del luci-app-netwatch netwatch'
 	do
 		if ! grep -Fq -- "$text" "$readme"; then

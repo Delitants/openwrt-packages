@@ -2,9 +2,9 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-runtime=outputs/netwatch_1.0.0-r1_all.apk
-luci=outputs/luci-app-netwatch_1.0.0-r1_all.apk
-source_archive=outputs/openwrt-netwatch-1.0.0-source.tar.gz
+runtime=outputs/netwatch_1.1.0-r1_all.apk
+luci=outputs/luci-app-netwatch_1.1.0-r1_all.apk
+source_archive=outputs/openwrt-netwatch-1.1.0-source.tar.gz
 tmp=$(mktemp -d "$root/work/verify-artifacts.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
@@ -37,7 +37,7 @@ container_tmp=/src${tmp#"$root"}
 
 jq -e '
 	.info.name == "netwatch" and
-	.info.version == "1.0.0-r1" and
+	.info.version == "1.1.0-r1" and
 	.info.arch == "noarch" and
 	(.info.depends | sort == [
 		"ca-bundle", "libc", "msmtp", "ucode", "ucode-mod-fs",
@@ -48,7 +48,7 @@ jq -e '
 
 jq -e '
 	.info.name == "luci-app-netwatch" and
-	.info.version == "1.0.0-r1" and
+	.info.version == "1.1.0-r1" and
 	.info.arch == "noarch" and
 	(.info.depends | sort == [
 		"libc", "luci-base", "netwatch", "rpcd-mod-luci"
@@ -79,10 +79,14 @@ printf '%s\n' \
 	'lib/apk/packages/netwatch.list' \
 	'usr/share/netwatch/alerts.uc' \
 	'usr/share/netwatch/config.uc' \
+	'usr/share/netwatch/diagnostics.uc' \
+	'usr/share/netwatch/interface_probe.uc' \
+	'usr/share/netwatch/interfaces.uc' \
 	'usr/share/netwatch/message.uc' \
 	'usr/share/netwatch/netwatchd.uc' \
 	'usr/share/netwatch/ping.uc' \
 	'usr/share/netwatch/probe.uc' \
+	'usr/share/netwatch/result.uc' \
 	'usr/share/netwatch/state.uc' \
 	'usr/share/netwatch/store.uc' > "$tmp/runtime-files.expected"
 diff -u "$tmp/runtime-files.expected" "$tmp/runtime-files"
@@ -137,12 +141,12 @@ if grep -E '/(\.git|\.superpowers|work|outputs)(/|$)' "$tmp/source-files"; then
 fi
 
 for required in \
-	openwrt-netwatch-1.0.0/README.md \
-	openwrt-netwatch-1.0.0/scripts/build-packages.sh \
-	openwrt-netwatch-1.0.0/scripts/package-output.sh \
-	openwrt-netwatch-1.0.0/scripts/verify-artifacts.sh \
-	openwrt-netwatch-1.0.0/packages/netwatch/netwatch/Makefile \
-	openwrt-netwatch-1.0.0/packages/netwatch/luci-app-netwatch/Makefile
+	openwrt-netwatch-1.1.0/README.md \
+	openwrt-netwatch-1.1.0/scripts/build-packages.sh \
+	openwrt-netwatch-1.1.0/scripts/package-output.sh \
+	openwrt-netwatch-1.1.0/scripts/verify-artifacts.sh \
+	openwrt-netwatch-1.1.0/packages/netwatch/netwatch/Makefile \
+	openwrt-netwatch-1.1.0/packages/netwatch/luci-app-netwatch/Makefile
 do
 	grep -Fxq "$required" "$tmp/source-files"
 done

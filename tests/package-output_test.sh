@@ -8,8 +8,8 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir -p "$tmp/scripts" "$tmp/work/sdk/bin/packages/base"
 cp "$root/scripts/package-output.sh" "$tmp/scripts/package-output.sh"
 cp "$root/README.md" "$tmp/README.md"
-printf 'runtime apk fixture\n' > "$tmp/work/sdk/bin/packages/base/netwatch-1.0.0-r1.apk"
-printf 'luci apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-netwatch-1.0.0-r1.apk"
+printf 'runtime apk fixture\n' > "$tmp/work/sdk/bin/packages/base/netwatch-1.1.0-r1.apk"
+printf 'luci apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-netwatch-1.1.0-r1.apk"
 
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" init -q
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
@@ -29,7 +29,19 @@ git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
 	./scripts/package-output.sh >/dev/null
 )
 
-archive=$tmp/outputs/openwrt-netwatch-1.0.0-source.tar.gz
+archive=$tmp/outputs/openwrt-netwatch-1.1.0-source.tar.gz
+for artifact in \
+	netwatch_1.1.0-r1_all.apk \
+	luci-app-netwatch_1.1.0-r1_all.apk \
+	openwrt-netwatch-1.1.0-source.tar.gz \
+	SHA256SUMS
+do
+	if [ ! -f "$tmp/outputs/$artifact" ]; then
+		echo "missing stable output artifact: $artifact" >&2
+		exit 1
+	fi
+done
+
 if tar -tzf "$archive" | grep -Fq 'local-only.secret'; then
 	echo 'source archive includes an untracked local file' >&2
 	exit 1

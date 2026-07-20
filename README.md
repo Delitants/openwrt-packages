@@ -1,8 +1,9 @@
 # OpenWrt Netwatch
 
-Netwatch monitors hosts with ICMP ping or TCP connection tests and sends
-rate-limited SMTP failure and recovery notifications. It includes a native
-OpenWrt service and a LuCI interface.
+Netwatch monitors hosts with ICMP ping, TCP services with connection tests,
+and OpenWrt networks, Linux devices, Wi-Fi radios, and APs by interface state.
+It sends rate-limited SMTP failure and recovery notifications and includes a
+native OpenWrt service and LuCI interface.
 
 This project is published as part of the public `Delitants/openwrt-packages`
 multi-package repository. Related OpenWrt package sources are grouped below
@@ -22,6 +23,12 @@ use the conventional `_all` suffix. The runtime package depends on ucode and
 its fs, log, socket, ubus, UCI, and uloop modules, plus `msmtp` and the CA
 certificate bundle.
 
+Interface monitoring uses the existing ucode ubus, UCI, fs, and uloop
+dependencies plus fixed system utilities when they are available. There is no
+hard `iwinfo` dependency: optional iwinfo output enriches Wi-Fi diagnostics,
+while its absence is reported as incomplete diagnostics instead of preventing
+installation or monitoring.
+
 ## Build
 
 Fetch and verify the pinned SDK, build both source packages inside the SDK
@@ -40,9 +47,9 @@ SHA-256
 The build script starts from a fresh package configuration so stale SDK-wide
 package selections cannot leak into the build. The packaging script publishes:
 
-- `outputs/netwatch_1.0.0-r1_all.apk`
-- `outputs/luci-app-netwatch_1.0.0-r1_all.apk`
-- `outputs/openwrt-netwatch-1.0.0-source.tar.gz`
+- `outputs/netwatch_1.1.0-r1_all.apk`
+- `outputs/luci-app-netwatch_1.1.0-r1_all.apk`
+- `outputs/openwrt-netwatch-1.1.0-source.tar.gz`
 - `outputs/SHA256SUMS`
 
 ## Build verification
@@ -53,11 +60,16 @@ and inspected with its apk-tools 3.0.5. The exact replayable verification is:
 ```sh
 ./tests/run-unit.sh \
   tests/unit/config_test.uc \
+  tests/unit/interfaces_test.uc \
+  tests/unit/interface_probe_test.uc \
+  tests/unit/diagnostics_test.uc \
   tests/unit/ping_test.uc \
   tests/unit/probe_test.uc \
   tests/unit/state_test.uc \
+  tests/unit/store_test.uc \
   tests/unit/alerts_test.uc \
   tests/unit/message_test.uc
+./tests/package-output_test.sh
 ./tests/static.sh
 ./scripts/verify-artifacts.sh
 git --git-dir=work/git-metadata --work-tree=. diff --check
@@ -68,22 +80,26 @@ For direct inspection of the two raw manifests, run:
 
 ```sh
 ./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
-  /src/outputs/netwatch_1.0.0-r1_all.apk | jq .info
+  /src/outputs/netwatch_1.1.0-r1_all.apk | jq .info
 ./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
-  /src/outputs/luci-app-netwatch_1.0.0-r1_all.apk | jq .info
+  /src/outputs/luci-app-netwatch_1.1.0-r1_all.apk | jq .info
 shasum -a 256 -c outputs/SHA256SUMS
 ```
 
-The recorded result is six passing unit suites, a passing static/ucode check,
-and two `1.0.0-r1` `noarch` manifests. The runtime manifest contains the CA
-bundle, `msmtp`, ucode, and all required ucode modules; the LuCI manifest
-contains `luci-base`, `rpcd-mod-luci`, and `netwatch`. All 13 runtime files and
-seven LuCI files match the expected lists. `/etc/config/netwatch` is a
-protected `0600` conffile, the init script is `0755`, and no packaged file is
-group- or world-writable. The credential scan is clean. The translation POT
-is a source-only build input and is intentionally not installed by the LuCI
-APK. Checksums, source-archive exclusions, unique paths, and Git snapshot
-reproducibility also pass.
+The source suite covers ten unit groups, stable package output generation,
+static/ucode checks, and artifact inspection. The artifact verifier requires
+two `1.1.0-r1` `noarch` manifests. The runtime manifest contains the CA bundle,
+`msmtp`, ucode, and all required ucode modules; the LuCI manifest contains
+`luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 17 runtime manifest paths
+and exactly seven LuCI manifest paths must match the expected lists. The
+runtime list includes the 12 modules `alerts.uc`, `config.uc`, `diagnostics.uc`,
+`interface_probe.uc`, `interfaces.uc`, `message.uc`, `netwatchd.uc`, `ping.uc`,
+`probe.uc`, `result.uc`, `state.uc`, and `store.uc`, in addition to the config,
+init, and three APK metadata paths. `/etc/config/netwatch` is a protected
+`0600` conffile, the init script is `0755`, and no packaged file may be group-
+or world-writable. The verifier also checks credentials, excludes the
+source-only translation POT from the LuCI APK, and validates checksums,
+source-archive exclusions, unique paths, and Git snapshot reproducibility.
 
 The package generation step itself does not use a signing command or key.
 Release APKs are signed separately before being copied into `feed/x86_64/`.
@@ -208,6 +224,47 @@ uci commit netwatch
 /etc/init.d/netwatch restart
 ```
 
+For interface-state monitoring, select the object in LuCI or store its stable
+selector directly. This example monitors the custom Wi-Fi AP whose UCI
+`wifi-iface` section is named `office`:
+
+```sh
+uci set netwatch.office_wifi=monitor
+uci set netwatch.office_wifi.enabled='1'
+uci set netwatch.office_wifi.name='Office Wi-Fi'
+uci set netwatch.office_wifi.type='interface'
+uci set netwatch.office_wifi.interface_selector='wifi-iface:office'
+uci set netwatch.office_wifi.interval='60'
+uci set netwatch.office_wifi.timeout='5'
+uci set netwatch.office_wifi.failures='3'
+uci set netwatch.office_wifi.initial_delay='300'
+uci set netwatch.office_wifi.repeat_interval='1800'
+uci set netwatch.office_wifi.max_alerts='5'
+uci set netwatch.office_wifi.recovery_email='1'
+uci commit netwatch
+/etc/init.d/netwatch restart
+```
+
+The four selector kinds are network:, device:, wifi-radio:, and wifi-iface:.
+They identify an OpenWrt logical network, Linux device, wireless radio UCI
+section, or AP/SSID `wifi-iface` UCI section respectively. AP choices show the
+configured SSID as a friendly label, but the saved selector uses the stable
+section name, so custom APs and duplicate SSIDs remain distinct. Configured
+choices remain selectable when they are disabled or absent from the current
+runtime. A previously saved selector that is temporarily missing from the
+inventory is preserved in a separate missing-selections group rather than
+silently cleared.
+
+When an interface monitor reaches a failure alert, Netwatch collects a new
+snapshot for that incident; cached status data is not reused. These email-only
+diagnostics are fresh, bounded, and redacted. Collection uses fixed command
+templates, allows 15 seconds, reads at most 256 KiB from a command, keeps at
+most 200 recent relevant log lines, caps each report section at 16 KiB and the
+whole report at 64 KiB, and redacts common secret and credential forms. Missing
+sources or utilities, including `iwinfo`, mark the report incomplete but do not
+block delivery of the failure email. Full diagnostics are not exposed by the
+status API or LuCI.
+
 Runtime state is kept in `/var/run/netwatch`, not written to flash. A service
 reload retains state for unchanged named monitor sections. Active incidents and their email counters reset after a router reboot.
 
@@ -250,15 +307,19 @@ public status, and then check its sanitized system log messages:
 ```sh
 /etc/init.d/netwatch restart
 ubus call netwatch status
+ubus call netwatch interfaces
 logread -e netwatch
 ```
 
 If `ubus` says the object is missing, check that the service is enabled and
-running with `/etc/init.d/netwatch status`. If a monitor is invalid, compare
-its fields with the ranges shown in LuCI. For email failures, verify the SMTP
-host, port, TLS mode, sender, recipients, router clock, DNS, and CA bundle.
-Port 587 normally uses `starttls`; port 465 uses `tls` from connection start.
-The status API and log never expose the SMTP password.
+running with `/etc/init.d/netwatch status`. The `interfaces` response groups
+sanitized selector candidates and reports unavailable inventory sources; use
+it to distinguish a disabled, absent, or temporarily undiscoverable selection.
+If a monitor is invalid, compare its fields with the ranges shown in LuCI. For
+email failures, verify the SMTP host, port, TLS mode, sender, recipients, router
+clock, DNS, and CA bundle. Port 587 normally uses `starttls`; port 465 uses
+`tls` from connection start. The status API and log never expose the SMTP
+password.
 
 ## Upgrade
 
@@ -268,7 +329,7 @@ packages:
 ```sh
 cp /etc/config/netwatch /root/netwatch.config.backup
 apk update
-apk add netwatch luci-app-netwatch
+apk upgrade netwatch luci-app-netwatch
 /etc/init.d/netwatch restart
 ```
 
