@@ -508,6 +508,25 @@ NODE
 		node --check "$view" || fail=1
 	done
 
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const dhcpBegin = source.indexOf("const callDHCPLeases");
+		const interfacesBegin = source.indexOf("const callInterfaces");
+		const labelsBegin = source.indexOf("const INTERFACE_GROUP_LABELS");
+		if (dhcpBegin < 0 || interfacesBegin < 0 || labelsBegin < 0 ||
+			!(dhcpBegin < interfacesBegin && interfacesBegin < labelsBegin))
+			throw new Error("unable to isolate monitor RPC declarations");
+		const dhcpDeclaration = source.slice(dhcpBegin, interfacesBegin);
+		const interfacesDeclaration = source.slice(interfacesBegin, labelsBegin);
+		if (!/\breject\s*:\s*true\b/.test(interfacesDeclaration) ||
+			/\breject\s*:\s*true\b/.test(dhcpDeclaration))
+			throw new Error("interface inventory RPC failures must reject without changing DHCP lease fallback behavior");
+		if (!source.includes("L.resolveDefault(callInterfaces(), { groups: [], errors: [ '"'"'unavailable'"'"' ] })") ||
+			!source.includes("inventoryErrors.length") ||
+			!source.includes("Interface inventory is temporarily incomplete. Saved selections are preserved."))
+			throw new Error("interface RPC rejection must drive the incomplete-inventory fallback description");
+	' "$monitors" || fail=1
+
 	for declaration in \
 		"object: 'netwatch', method: 'status', expect: { '': {} }" \
 		"object: 'netwatch', method: 'check', params: [ 'id' ]" \

@@ -9,7 +9,7 @@ const callDHCPLeases = rpc.declare({
 });
 
 const callInterfaces = rpc.declare({
-	object: 'netwatch', method: 'interfaces', expect: { '': {} }
+	object: 'netwatch', method: 'interfaces', expect: { '': {} }, reject: true
 });
 
 const INTERFACE_GROUP_LABELS = {
