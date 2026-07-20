@@ -52,10 +52,14 @@ package selections cannot leak into the build. The packaging script publishes:
 - `outputs/openwrt-netwatch-1.1.0-source.tar.gz`
 - `outputs/SHA256SUMS`
 
+These are the planned 1.1.0 release outputs. The currently published feed
+remains at `netwatch-1.0.0-r1` and `luci-app-netwatch-1.0.0-r1` until the 1.1.0
+release is built, signed, and published.
+
 ## Build verification
 
-The release artifacts were built with the pinned OpenWrt 25.12.5 x86/64 SDK
-and inspected with its apk-tools 3.0.5. The exact replayable verification is:
+Release artifacts are built with the pinned OpenWrt 25.12.5 x86/64 SDK and can
+be inspected with its apk-tools 3.0.5. The exact replayable verification is:
 
 ```sh
 ./tests/run-unit.sh \
@@ -255,15 +259,16 @@ runtime. A previously saved selector that is temporarily missing from the
 inventory is preserved in a separate missing-selections group rather than
 silently cleared.
 
-When an interface monitor reaches a failure alert, Netwatch collects a new
-snapshot for that incident; cached status data is not reused. These email-only
-diagnostics are fresh, bounded, and redacted. Collection uses fixed command
-templates, allows 15 seconds, reads at most 256 KiB from a command, keeps at
-most 200 recent relevant log lines, caps each report section at 16 KiB and the
-whole report at 64 KiB, and redacts common secret and credential forms. Missing
-sources or utilities, including `iwinfo`, mark the report incomplete but do not
-block delivery of the failure email. Full diagnostics are not exposed by the
-status API or LuCI.
+Every due interface failure email—initial, repeat, or retry when
+applicable—starts a fresh diagnostic collection. Diagnostic reports are not
+cached or persisted. These email-only diagnostics are fresh, bounded, and
+redacted. Collection uses a new interface snapshot and fixed command templates,
+allows 15 seconds, reads at most 256 KiB from a command, keeps at most 200 recent
+relevant log lines, caps each report section at 16 KiB and the whole report at
+64 KiB, and redacts common secret and credential forms. Missing sources or
+utilities, including `iwinfo`, mark the report incomplete but do not block
+delivery of the failure email. Full diagnostics are not exposed by the status
+API or LuCI.
 
 Runtime state is kept in `/var/run/netwatch`, not written to flash. A service
 reload retains state for unchanged named monitor sections. Active incidents and their email counters reset after a router reboot.

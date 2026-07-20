@@ -172,7 +172,6 @@ if [ "$fail" -eq 0 ]; then
 		"uci set netwatch.office_wifi.interface_selector='wifi-iface:office'" \
 		'network:, device:, wifi-radio:, and wifi-iface:' \
 		'disabled or absent' \
-		'fresh, bounded, and redacted' \
 		'optional iwinfo' \
 		'port 587 with STARTTLS' \
 		'port 465 with implicit TLS' \
@@ -189,6 +188,40 @@ if [ "$fail" -eq 0 ]; then
 			fail=1
 		fi
 	done
+
+	node - "$readme" <<'NODE' || fail=1
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[2], 'utf8');
+
+function section(name, next) {
+	const begin = source.indexOf(`## ${name}\n`);
+	const end = source.indexOf(`## ${next}\n`, begin + 1);
+	if (begin < 0 || end < 0)
+		throw new Error(`unable to isolate README ${name} section`);
+	return source.slice(begin, end).replace(/\s+/g, ' ');
+}
+
+const build = section('Build', 'Build verification');
+const verification = section('Build verification', 'Install');
+const configure = section('Configure', 'Package feed maintenance');
+const errors = [];
+
+if (!build.includes('These are the planned 1.1.0 release outputs.') ||
+	!build.includes('The currently published feed remains at `netwatch-1.0.0-r1` and `luci-app-netwatch-1.0.0-r1` until the 1.1.0 release is built, signed, and published.'))
+	errors.push('README must distinguish planned 1.1.0 outputs from the current 1.0.0-r1 feed');
+
+if (!verification.startsWith('## Build verification Release artifacts are built with the pinned OpenWrt 25.12.5 x86/64 SDK and can be inspected with its apk-tools 3.0.5.') ||
+	/\brelease artifacts were built\b/i.test(verification) ||
+	/\b1\.1\.0[^.]*\b(were|have been) (built|inspected)\b/i.test(verification))
+	errors.push('README build verification must be prospective and must not claim unbuilt 1.1.0 artifacts were inspected');
+
+if (!configure.includes('Every due interface failure email—initial, repeat, or retry when applicable—starts a fresh diagnostic collection. Diagnostic reports are not cached or persisted.') ||
+	!configure.includes('These email-only diagnostics are fresh, bounded, and redacted.'))
+	errors.push('README must promise fresh non-persisted diagnostics for every due interface failure email');
+
+if (errors.length)
+	throw new Error(errors.join('\n'));
+NODE
 
 	node - "$pot" \
 		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js" \
