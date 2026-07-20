@@ -1,0 +1,8 @@
+{
+  "admin/system/scheduled-backup": {
+    "title": "Scheduled Backup",
+    "order": 45,
+    "action": { "type": "view", "path": "scheduled-backup" },
+    "depends": { "acl": [ "luci-app-scheduled-backup" ] }
+  }
+}

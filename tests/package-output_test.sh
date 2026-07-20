@@ -10,6 +10,8 @@ cp "$root/scripts/package-output.sh" "$tmp/scripts/package-output.sh"
 cp "$root/README.md" "$tmp/README.md"
 printf 'runtime apk fixture\n' > "$tmp/work/sdk/bin/packages/base/netwatch-1.1.0-r1.apk"
 printf 'luci apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-netwatch-1.1.0-r1.apk"
+printf 'scheduled backup apk fixture\n' > \
+	"$tmp/work/sdk/bin/packages/base/luci-app-scheduled-backup-1.0.0-r3.apk"
 
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" init -q
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
@@ -33,6 +35,7 @@ archive=$tmp/outputs/openwrt-netwatch-1.1.0-source.tar.gz
 for artifact in \
 	netwatch_1.1.0-r1_all.apk \
 	luci-app-netwatch_1.1.0-r1_all.apk \
+	luci-app-scheduled-backup_1.0.0-r3_all.apk \
 	openwrt-netwatch-1.1.0-source.tar.gz \
 	SHA256SUMS
 do
@@ -40,6 +43,18 @@ do
 		echo "missing stable output artifact: $artifact" >&2
 		exit 1
 	fi
+done
+
+for artifact in \
+	netwatch_1.1.0-r1_all.apk \
+	luci-app-netwatch_1.1.0-r1_all.apk \
+	luci-app-scheduled-backup_1.0.0-r3_all.apk \
+	openwrt-netwatch-1.1.0-source.tar.gz
+do
+	grep -Fq "  outputs/$artifact" "$tmp/outputs/SHA256SUMS" || {
+		echo "checksum manifest omits artifact: $artifact" >&2
+		exit 1
+	}
 done
 
 if tar -tzf "$archive" | grep -Fq 'local-only.secret'; then

@@ -1,0 +1,9 @@
+#!/bin/sh
+# config scheduled-backup '/etc/init.d/scheduled-backup reload'
+uci -q batch <<-EOF
+	delete ucitrack.@scheduled-backup[-1]
+	add ucitrack scheduled-backup
+	set ucitrack.@scheduled-backup[-1].init='scheduled-backup'
+	commit ucitrack
+EOF
+exit 0

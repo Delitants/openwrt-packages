@@ -1,0 +1,367 @@
+#!/bin/sh
+set -u
+
+SB_UCI=${SB_UCI:-uci}
+SB_SYSUPGRADE=${SB_SYSUPGRADE:-sysupgrade}
+SB_TAR=${SB_TAR:-tar}
+SB_LOGGER=${SB_LOGGER:-logger}
+SB_STATUS=${SB_STATUS:-/var/run/scheduled-backup.status}
+SB_LOCKDIR=${SB_LOCKDIR:-/var/run/scheduled-backup.lock}
+SB_TMPBASE=${SB_TMPBASE:-/tmp}
+SB_LFTP=${SB_LFTP:-lftp}
+SB_SSH_KEYSCAN=${SB_SSH_KEYSCAN:-ssh-keyscan}
+SB_SSH_KEYGEN=${SB_SSH_KEYGEN:-ssh-keygen}
+SB_SECRET_DIR=${SB_SECRET_DIR:-/etc/scheduled-backup}
+
+SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$SELF_DIR/../lib/scheduled-backup/core.sh"
+
+log() {
+	"$SB_LOGGER" -t scheduled-backup -- "$1" || :
+}
+
+uci_get() {
+	"$SB_UCI" -q get "$1"
+}
+
+write_status() {
+	if ! sb_write_status "$SB_STATUS" "$@"; then
+		log "status write failed: $SB_STATUS"
+		return 1
+	fi
+}
+
+cleanup() {
+	[ -z "${archive_tmp:-}" ] || rm -f "$archive_tmp"
+	[ -z "${local_part:-}" ] || rm -f "$local_part"
+	[ -z "${lftp_batch:-}" ] || rm -f "$lftp_batch"
+	[ -z "${lftp_listing:-}" ] || rm -f "$lftp_listing"
+	[ -z "${keyscan_tmp:-}" ] || rm -f "$keyscan_tmp"
+	[ -z "${keyscan_line_tmp:-}" ] || rm -f "$keyscan_line_tmp"
+	[ -z "${keyscan_map:-}" ] || rm -f "$keyscan_map"
+	if [ "${lock_owned:-0}" -ne 0 ]; then
+		rmdir "$SB_LOCKDIR" 2>/dev/null || :
+		lock_owned=0
+	fi
+	archive_tmp=
+	local_part=
+	lftp_batch=
+	lftp_listing=
+	keyscan_tmp=
+	keyscan_line_tmp=
+	keyscan_map=
+}
+
+signal_exit() {
+	_code=$1
+	trap - 0 HUP INT TERM
+	cleanup
+	exit "$_code"
+}
+
+config_error() {
+	log "configuration error: $1"
+	return 1
+}
+
+load_sftp_config() {
+	sftp_host=$(uci_get scheduled-backup.main.sftp_host) || sftp_host=
+	sftp_port=$(uci_get scheduled-backup.main.sftp_port) || sftp_port=
+	sftp_user=$(uci_get scheduled-backup.main.sftp_user) || sftp_user=
+	sftp_path=$(uci_get scheduled-backup.main.sftp_path) || sftp_path=
+	sftp_auth=$(uci_get scheduled-backup.main.sftp_auth) || sftp_auth=
+	sftp_keep=$(uci_get scheduled-backup.main.sftp_keep) || sftp_keep=
+	connect_timeout=$(uci_get scheduled-backup.main.connect_timeout) || connect_timeout=
+	transfer_timeout=$(uci_get scheduled-backup.main.transfer_timeout) || transfer_timeout=
+	sb_validate_sftp_host "$sftp_host" || return 1
+	sb_validate_uint sftp_port "$sftp_port" 1 65535 || return 1
+	sb_validate_sftp_user "$sftp_user" || return 1
+	sb_validate_sftp_path "$sftp_path" || return 1
+	sb_validate_uint sftp_keep "$sftp_keep" 0 2147483647 || return 1
+	sb_validate_uint connect_timeout "$connect_timeout" 1 2147483647 || return 1
+	sb_validate_uint transfer_timeout "$transfer_timeout" 1 2147483647 || return 1
+	case "$sftp_auth" in password|key) ;; *) return 1 ;; esac
+}
+
+scan_host_key() {
+	keyscan_tmp=$SB_TMPBASE/scheduled-backup.keyscan.$$
+	keyscan_line_tmp=$SB_TMPBASE/scheduled-backup.keyline.$$
+	keyscan_map=$SB_TMPBASE/scheduled-backup.keymap.$$
+	umask 077
+	"$SB_SSH_KEYSCAN" -p "$sftp_port" -- "$sftp_host" >"$keyscan_tmp" 2>/dev/null || return 1
+	[ -s "$keyscan_tmp" ] || return 1
+	: >"$keyscan_map"
+	while IFS= read -r key_line; do
+		[ -n "$key_line" ] || continue
+		printf '%s\n' "$key_line" >"$keyscan_line_tmp" || return 1
+		fingerprint=$("$SB_SSH_KEYGEN" -lf "$keyscan_line_tmp" 2>/dev/null | awk 'NR == 1 { print $2 }')
+		[ -n "$fingerprint" ] || return 1
+		printf '%s\t%s\n' "$fingerprint" "$key_line" >>"$keyscan_map" || return 1
+	done <"$keyscan_tmp"
+	[ -s "$keyscan_map" ] || return 1
+}
+
+test_sftp() {
+	load_sftp_config || { printf '%s\n' 'invalid SFTP configuration' >&2; return 1; }
+	scan_host_key || { printf '%s\n' 'could not retrieve host key' >&2; cleanup; return 1; }
+	if [ -s "$SB_SECRET_DIR/known_hosts" ]; then
+		trusted=$(sed -n '1p' "$SB_SECRET_DIR/known_hosts")
+		if ! awk -F '\t' -v trusted="$trusted" 'substr($0, index($0, "\t") + 1) == trusted { found=1 } END { exit !found }' "$keyscan_map"; then
+			printf '%s\n' 'host key changed' >&2
+			cleanup
+			return 1
+		fi
+		case "$sftp_auth" in password) [ -s "$SB_SECRET_DIR/password" ] ;; key) [ -s "$SB_SECRET_DIR/id_backup" ] ;; esac || { printf '%s\n' 'authentication failed' >&2; cleanup; return 1; }
+		umask 077
+		lftp_batch=$SB_TMPBASE/scheduled-backup.test-lftp.$$
+		{ write_lftp_common; printf 'bye\n'; } >"$lftp_batch" || { cleanup; return 1; }
+		chmod 600 "$lftp_batch" || { cleanup; return 1; }
+		"$SB_LFTP" -f "$lftp_batch" >/dev/null || { printf '%s\n' 'authenticated path verification failed' >&2; cleanup; return 1; }
+		printf '%s\n' 'result=verified'
+		cleanup
+		return 0
+	fi
+	printf '%s\n' 'result=untrusted'
+	sed 's/^/fingerprints=/' "$keyscan_map"
+	cleanup
+}
+
+local_retention() {
+	set --
+	for candidate in "$local_path"/openwrt-"$host"-????????-??????.tar.gz; do
+		[ -f "$candidate" ] || continue
+		base=${candidate##*/}
+		case "$base" in openwrt-"$host"-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].tar.gz) set -- "$@" "$base" ;; esac
+	done
+	expired=$(sb_select_expired "$local_keep" "$@")
+	[ -n "$expired" ] || return 0
+	printf '%s\n' "$expired" | while IFS= read -r old; do rm -f -- "$local_path/$old" || exit 1; done
+}
+
+archive_failure() {
+	reason=$1
+	finished=$(date +%s)
+	if [ "$local_enabled" = 1 ]; then local_result=failed; local_message=$reason; else local_result=disabled; local_message=not_run; fi
+	if [ "$sftp_enabled" = 1 ]; then sftp_result=failed; sftp_message=$reason; else sftp_result=disabled; sftp_message=not_run; fi
+	write_status failed "$started" "$finished" "$filename" 0 "$local_result" "$local_message" "$sftp_result" "$sftp_message" "$reason" || :
+}
+
+trust_host() {
+	[ "$#" -eq 1 ] && [ -n "$1" ] || { printf '%s\n' 'fingerprint required' >&2; return 2; }
+	requested=$1
+	load_sftp_config || { printf '%s\n' 'invalid SFTP configuration' >&2; return 1; }
+	scan_host_key || { printf '%s\n' 'could not retrieve host key' >&2; cleanup; return 1; }
+	matches=$(awk -F '\t' -v wanted="$requested" '$1 == wanted { count++ } END { print count + 0 }' "$keyscan_map")
+	if [ "$matches" -ne 1 ]; then
+		printf '%s\n' 'fingerprint has no unique match' >&2
+		cleanup
+		return 1
+	fi
+	selected_key=$(awk -F '\t' -v wanted="$requested" '$1 == wanted { print substr($0, index($0, "\t") + 1) }' "$keyscan_map")
+	umask 077
+	mkdir -p "$SB_SECRET_DIR" || { cleanup; return 1; }
+	known_tmp=$SB_SECRET_DIR/.known_hosts.$$
+	if ! printf '%s\n' "$selected_key" >"$known_tmp" || ! chmod 600 "$known_tmp" || ! mv -f "$known_tmp" "$SB_SECRET_DIR/known_hosts"; then
+		rm -f "$known_tmp"
+		cleanup
+		return 1
+	fi
+	cleanup
+}
+
+write_lftp_common() {
+	_known=$(sb_lftp_quote "$SB_SECRET_DIR/known_hosts")
+	_connect="ssh -a -x -p $sftp_port -o ConnectTimeout=$connect_timeout -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$_known"
+	if [ "$sftp_auth" = key ]; then
+		_key=$(sb_lftp_quote "$SB_SECRET_DIR/id_backup")
+		_connect="$_connect -o BatchMode=yes -i $_key"
+	fi
+	printf 'set cmd:fail-exit yes\n'
+	printf 'set sftp:connect-program "%s"\n' "$_connect"
+	printf 'set net:timeout %s\n' "$transfer_timeout"
+	if [ "$sftp_auth" = password ]; then
+		_password=$(sb_lftp_quote "$(sed -n '1p' "$SB_SECRET_DIR/password")")
+		printf 'open -u "%s","%s" sftp://%s:%s\n' "$sftp_user" "$_password" "$sftp_host" "$sftp_port"
+	else
+		printf 'open -u "%s" sftp://%s:%s\n' "$sftp_user" "$sftp_host" "$sftp_port"
+	fi
+	printf 'cd "%s"\n' "$sftp_path"
+}
+
+sftp_transfer() {
+	[ -s "$SB_SECRET_DIR/known_hosts" ] || return 1
+	case "$sftp_auth" in
+		password) [ -s "$SB_SECRET_DIR/password" ] || return 1 ;;
+		key) [ -s "$SB_SECRET_DIR/id_backup" ] || return 1 ;;
+	esac
+	umask 077
+	lftp_batch=$SB_TMPBASE/scheduled-backup.lftp.$$
+	lftp_listing=$SB_TMPBASE/scheduled-backup.list.$$
+	{
+		write_lftp_common
+		printf 'put "%s" -o %s.part\n' "$archive_tmp" "$filename"
+		printf 'mv %s.part %s\n' "$filename" "$filename"
+		printf 'cls -1 -- openwrt-%s-????????-??????.tar.gz\n' "$host"
+		printf 'bye\n'
+	} >"$lftp_batch" || return 1
+	chmod 600 "$lftp_batch" || return 1
+	if ! "$SB_LFTP" -f "$lftp_batch" >"$lftp_listing"; then
+		return 1
+	fi
+	[ "$sftp_keep" -gt 0 ] || return 0
+	expired=$(sb_select_expired "$sftp_keep" $(sed -n "/^openwrt-$host-[0-9]\\{8\\}-[0-9]\\{6\\}\\.tar\\.gz\$/p" "$lftp_listing"))
+	[ -n "$expired" ] || return 0
+	{
+		write_lftp_common
+		printf '%s\n' "$expired" | while IFS= read -r old; do printf 'rm %s\n' "$old"; done
+		printf 'bye\n'
+	} >"$lftp_batch" || return 1
+	chmod 600 "$lftp_batch" || return 1
+	"$SB_LFTP" -f "$lftp_batch" >/dev/null
+}
+
+run_backup() {
+	enabled=$(uci_get scheduled-backup.main.enabled) || enabled=
+	local_enabled=$(uci_get scheduled-backup.main.local_enabled) || local_enabled=
+	local_path=$(uci_get scheduled-backup.main.local_path) || local_path=
+	local_keep=$(uci_get scheduled-backup.main.local_keep) || local_keep=
+	sftp_enabled=$(uci_get scheduled-backup.main.sftp_enabled) || sftp_enabled=
+	hostname_value=$(uci_get 'system.@system[0].hostname') || hostname_value=
+
+	case "$enabled:$local_enabled:$sftp_enabled" in
+		[01]:[01]:[01]) ;;
+		*) config_error 'enabled flags must be 0 or 1'; return 1 ;;
+	esac
+	[ "$enabled" = 1 ] || { config_error 'backups are globally disabled'; return 1; }
+	[ "$local_enabled" = 1 ] || [ "$sftp_enabled" = 1 ] || {
+		config_error 'no backup destination is enabled'
+		return 1
+	}
+	if [ "$local_enabled" = 1 ]; then
+		sb_validate_uint local_keep "$local_keep" 0 2147483647 || {
+			config_error 'local retention is invalid'
+			return 1
+		}
+		sb_validate_path "$local_path" || {
+			config_error 'local path must be absolute'
+			return 1
+		}
+	fi
+	if [ "$sftp_enabled" = 1 ]; then
+		load_sftp_config || { config_error 'SFTP configuration is invalid'; return 1; }
+	fi
+	host=$(sb_sanitize_hostname "$hostname_value")
+	[ -n "$host" ] || { config_error 'hostname is invalid'; return 1; }
+
+	started=$(date +%s)
+	if ! mkdir "$SB_LOCKDIR" 2>/dev/null; then
+		finished=$(date +%s)
+		if [ "$local_enabled" = 1 ]; then
+			lock_local_result=skipped
+		else
+			lock_local_result=disabled
+		fi
+		if [ "$sftp_enabled" = 1 ]; then
+			lock_sftp_result=skipped
+		else
+			lock_sftp_result=disabled
+		fi
+		write_status skipped "$started" "$finished" '' 0 "$lock_local_result" lock_busy "$lock_sftp_result" not_run lock_busy || return 1
+		log 'backup skipped: another run holds the lock'
+		return 0
+	fi
+	lock_owned=1
+	archive_tmp=$SB_TMPBASE/scheduled-backup.$$.tar.gz
+	local_part=
+	lftp_batch=
+	lftp_listing=
+	keyscan_tmp=
+	keyscan_line_tmp=
+	keyscan_map=
+	trap cleanup 0
+	trap 'signal_exit 129' HUP
+	trap 'signal_exit 130' INT
+	trap 'signal_exit 143' TERM
+
+	filename=$(sb_filename "$host" "$started")
+	if [ "$local_enabled" = 1 ]; then
+		local_result=pending
+		local_message=in_progress
+	else
+		local_result=disabled
+		local_message=not_run
+	fi
+	if [ "$sftp_enabled" = 1 ]; then
+		sftp_result=pending
+		sftp_message=in_progress
+	else
+		sftp_result=disabled
+		sftp_message=not_run
+	fi
+	write_status running "$started" '' "$filename" 0 "$local_result" "$local_message" "$sftp_result" "$sftp_message" running || return 1
+	log "backup started: $filename"
+	if ! "$SB_SYSUPGRADE" -k -b "$archive_tmp"; then
+		archive_failure creation_failed
+		log 'backup failed: sysupgrade could not create archive'
+		return 1
+	fi
+	if [ ! -f "$archive_tmp" ] || ! "$SB_TAR" -tzf "$archive_tmp" >/dev/null 2>&1; then
+		archive_failure invalid_archive
+		log 'backup failed: invalid archive'
+		return 1
+	fi
+
+	if [ "$local_enabled" = 1 ]; then
+		if ! mkdir -p "$local_path"; then
+			local_result=failed
+			local_message=directory_failed
+		else
+			local_part=$local_path/.$filename.part
+			if ! cp "$archive_tmp" "$local_part" || ! mv -f "$local_part" "$local_path/$filename"; then
+				local_result=failed
+				local_message=publish_failed
+			else
+				local_part=
+				if local_retention; then local_result=success; local_message=stored; else local_result=failed; local_message=retention_failed; fi
+			fi
+		fi
+	fi
+	size=$(wc -c <"$archive_tmp" | tr -d ' ')
+	if [ "$sftp_enabled" = 1 ]; then
+		if sftp_transfer; then
+			sftp_result=success
+			sftp_message=stored
+		else
+			sftp_result=failed
+			sftp_message=transfer_failed
+		fi
+	fi
+	finished=$(date +%s)
+	case "$local_result:$sftp_result" in
+		success:success|success:disabled|disabled:success)
+			state=success; summary=success; rc=0 ;;
+		success:failed|failed:success)
+			state=partial; summary=destination_failed; rc=1 ;;
+		*)
+			state=failed; summary=destination_failed; rc=1 ;;
+	esac
+	write_status "$state" "$started" "$finished" "$filename" "$size" "$local_result" "$local_message" "$sftp_result" "$sftp_message" "$summary" || return 1
+	if [ "$rc" -eq 0 ]; then
+		log "backup completed: $filename"
+	else
+		log "backup $state: one or more destinations failed"
+	fi
+	return "$rc"
+}
+
+case "${1:-}" in
+	run) run_backup ;;
+	status)
+		[ -r "$SB_STATUS" ] || exit 1
+		while IFS='=' read -r key value; do
+			case "$key" in state|started|finished|filename|size|local_result|local_message|sftp_result|sftp_message|summary) printf '%s=%s\n' "$key" "$value" ;; esac
+		done <"$SB_STATUS" ;;
+	test-sftp) test_sftp ;;
+	trust-host) shift; trust_host "$@" ;;
+	*) printf 'usage: %s {run|status|test-sftp|trust-host FINGERPRINT}\n' "$0" >&2; exit 2 ;;
+esac

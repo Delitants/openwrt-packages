@@ -28,6 +28,11 @@ require_file packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/vi
 require_file packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js
 require_file packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js
 require_file packages/netwatch/luci-app-netwatch/po/templates/netwatch.pot
+require_file packages/scheduled-backup/luci-app-scheduled-backup/Makefile
+require_file packages/scheduled-backup/luci-app-scheduled-backup/root/usr/sbin/scheduled-backup
+require_file packages/scheduled-backup/luci-app-scheduled-backup/root/etc/config/scheduled-backup
+require_file packages/scheduled-backup/luci-app-scheduled-backup/htdocs/luci-static/resources/view/scheduled-backup.js
+require_file packages/scheduled-backup/luci-app-scheduled-backup/tests/run.sh
 require_file README.md
 require_file tools/sdk/Dockerfile
 require_file scripts/fetch-sdk.sh
@@ -146,7 +151,9 @@ if [ "$runtime_manifest_count" != 17 ] || [ "$luci_manifest_count" != 7 ]; then
 fi
 
 if [ "$fail" -eq 0 ]; then
-	readme="$root/README.md"
+	index_readme="$root/README.md"
+	readme="$root/packages/netwatch/README.md"
+	scheduled_readme="$root/packages/scheduled-backup/luci-app-scheduled-backup/README.md"
 	pot="$root/packages/netwatch/luci-app-netwatch/po/templates/netwatch.pot"
 	menu_catalog="$root/packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json"
 	acl_catalog="$root/packages/netwatch/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json"
@@ -224,6 +231,39 @@ if (!configure.includes('Every due interface failure email—initial, repeat, or
 if (errors.length)
 	throw new Error(errors.join('\n'));
 NODE
+
+	for text in \
+		'apk add luci-app-scheduled-backup' \
+		'apk upgrade luci-app-scheduled-backup' \
+		'1.0.0-r3' \
+		'/www/luci-static/resources/view/scheduled-backup.js' \
+		'System > Scheduled Backup' \
+		'local and SFTP destinations' \
+		'OpenWrt native restore'
+	do
+		if ! grep -Fq -- "$text" "$scheduled_readme"; then
+			echo "missing scheduled-backup README content: $text" >&2
+			fail=1
+		fi
+	done
+
+	if ! grep -Fq 'outputs/luci-app-scheduled-backup_1.0.0-r3_all.apk' \
+		"$root/scripts/verify-artifacts.sh"; then
+		echo 'artifact verifier omits Scheduled Backup r3' >&2
+		fail=1
+	fi
+
+	for link in \
+		'[Netwatch](packages/netwatch/README.md)' \
+		'[Scheduled Backup](packages/scheduled-backup/luci-app-scheduled-backup/README.md)'
+	do
+		if ! grep -Fq -- "$link" "$index_readme"; then
+			echo "missing package index link: $link" >&2
+			fail=1
+		fi
+	done
+
+	"$root/packages/scheduled-backup/luci-app-scheduled-backup/tests/run.sh" || fail=1
 
 	node - "$pot" \
 		"$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js" \

@@ -1,0 +1,13 @@
+{
+  "luci-app-scheduled-backup": {
+    "description": "Configure and operate scheduled backups",
+    "read": {
+      "uci": [ "scheduled-backup" ],
+      "ubus": { "scheduled-backup": [ "status", "test_sftp" ] }
+    },
+    "write": {
+      "uci": [ "scheduled-backup" ],
+      "ubus": { "scheduled-backup": [ "run", "trust_host", "set_password", "clear_password", "set_key", "clear_key" ] }
+    }
+  }
+}
