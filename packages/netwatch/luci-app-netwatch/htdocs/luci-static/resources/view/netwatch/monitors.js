@@ -8,6 +8,17 @@ const callDHCPLeases = rpc.declare({
 	object: 'luci-rpc', method: 'getDHCPLeases', expect: { '': {} }
 });
 
+const callInterfaces = rpc.declare({
+	object: 'netwatch', method: 'interfaces', expect: { '': {} }
+});
+
+const INTERFACE_GROUP_LABELS = {
+	'networks': _('OpenWrt networks'),
+	'devices': _('Linux devices'),
+	'wifi-radios': _('Wi-Fi radios'),
+	'wifi-aps': _('Wi-Fi APs / SSIDs')
+};
+
 function addLeaseChoice(option, seen, address, hostname) {
 	if (typeof(address) !== 'string')
 		return;
@@ -38,18 +49,84 @@ function addLeaseChoices(option, leaseInfo) {
 	}
 }
 
+function cleanChoiceText(value, fallback) {
+	return typeof(value) === 'string' && value !== ''
+		? value.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 512)
+		: fallback;
+}
+
+function normalizeInterfaceGroups(inventory, savedSelectors) {
+	const groups = [];
+	const seen = Object.create(null);
+	const input = inventory && Array.isArray(inventory.groups) ? inventory.groups : [];
+
+	for (const group of input) {
+		if (!group || !Object.prototype.hasOwnProperty.call(INTERFACE_GROUP_LABELS, group.id) ||
+			!Array.isArray(group.items))
+			continue;
+		const items = [];
+		for (const item of group.items) {
+			if (!item || typeof(item.selector) !== 'string' ||
+				!/^(network|device|wifi-radio|wifi-iface):[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(item.selector) ||
+				seen[item.selector])
+				continue;
+			seen[item.selector] = true;
+			const state = cleanChoiceText(item.state, 'unknown');
+			items.push({
+				selector: item.selector,
+				label: '%s (%s)'.format(cleanChoiceText(item.label, item.selector), state)
+			});
+		}
+		groups.push({ id: group.id, label: INTERFACE_GROUP_LABELS[group.id], items });
+	}
+
+	const missing = [];
+	for (const selector of savedSelectors) {
+		if (typeof(selector) === 'string' && selector !== '' && !seen[selector]) {
+			seen[selector] = true;
+			missing.push({ selector, label: _('Missing: %s').format(selector) });
+		}
+	}
+	if (missing.length)
+		groups.push({ id: 'missing', label: _('Missing selections'), items: missing });
+	return groups;
+}
+
+const GroupedInterfaceValue = form.ListValue.extend({
+	renderWidget(sectionId, optionIndex, cfgvalue) {
+		const root = this.super('renderWidget', arguments);
+		const select = root.querySelector('select');
+		const options = Object.create(null);
+		for (const option of Array.from(select.options))
+			if (option.value !== '') options[option.value] = option;
+		for (const group of this.interfaceGroups || []) {
+			const optgroup = E('optgroup', { 'label': group.label });
+			for (const item of group.items)
+				if (options[item.selector]) optgroup.appendChild(options[item.selector]);
+			if (optgroup.children.length) select.appendChild(optgroup);
+		}
+		return root;
+	}
+});
+
 return view.extend({
 	load() {
 		return Promise.all([
 			uci.load('netwatch'),
-			L.resolveDefault(callDHCPLeases(), {})
+			L.resolveDefault(callDHCPLeases(), {}),
+			L.resolveDefault(callInterfaces(), { groups: [], errors: [ 'unavailable' ] })
 		]);
 	},
 
 	render(data) {
 		const leaseInfo = data[1] || {};
+		const savedSelectors = uci.sections('netwatch', 'monitor')
+			.map(monitor => monitor.interface_selector)
+			.filter(value => typeof(value) === 'string' && value !== '');
+		const interfaceGroups = normalizeInterfaceGroups(data[2], savedSelectors);
+		const inventoryErrors = data[2] && Array.isArray(data[2].errors) ? data[2].errors : [];
 		const m = new form.Map('netwatch', _('Netwatch monitors'),
-			_('Monitor DHCP clients or manually entered IP addresses and host names.'));
+			_('Monitor hosts, TCP services, OpenWrt networks, Linux devices, Wi-Fi radios, and APs.'));
 		const s = m.section(form.GridSection, 'monitor', _('Monitors'));
 		let o;
 
@@ -69,14 +146,33 @@ return view.extend({
 		o = s.option(form.ListValue, 'type', _('Test'));
 		o.value('ping', _('Ping'));
 		o.value('tcp', _('TCP port'));
+		o.value('interface', _('Interface state'));
 		o.default = 'ping';
 		o.rmempty = false;
 
-		o = s.option(form.Value, 'target', _('Host or IP address'),
+		const target = s.option(form.Value, 'target', _('Host or IP address'),
 			_('Select an active DHCP lease or enter a target manually.'));
-		o.datatype = 'or(hostname,ipaddr("nomask"))';
+		target.datatype = 'or(hostname,ipaddr("nomask"))';
+		target.rmempty = false;
+		addLeaseChoices(target, leaseInfo);
+		target.depends('type', 'ping');
+		target.depends('type', 'tcp');
+
+		o = s.option(GroupedInterfaceValue, 'interface_selector', _('Interface or Wi-Fi AP'),
+			inventoryErrors.length
+				? _('Interface inventory is temporarily incomplete. Saved selections are preserved.')
+				: _('Select an OpenWrt network, Linux device, Wi-Fi radio, or AP/SSID.'));
+		o.interfaceGroups = interfaceGroups;
+		for (const group of interfaceGroups)
+			for (const item of group.items)
+				o.value(item.selector, item.label);
 		o.rmempty = false;
-		addLeaseChoices(o, leaseInfo);
+		o.modalonly = true;
+		o.depends('type', 'interface');
+		o.validate = function(sectionId, value) {
+			return /^(network|device|wifi-radio|wifi-iface):[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(value)
+				? true : _('Select an interface.');
+		};
 
 		o = s.option(form.Value, 'interval', _('Check interval'), _('Seconds between checks.'));
 		o.datatype = 'range(5,86400)';

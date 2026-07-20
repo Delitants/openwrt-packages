@@ -626,7 +626,7 @@ NODE
 	node -e '
 		const source = require("fs").readFileSync(process.argv[1], "utf8");
 		const begin = source.indexOf("function addLeaseChoice");
-		const end = source.indexOf("\n\nreturn view.extend");
+		const end = source.indexOf("\n\nfunction cleanChoiceText", begin);
 		if (begin < 0 || end < 0)
 			throw new Error("unable to load DHCP lease choice helpers");
 		const helpers = Function(`${source.slice(begin, end)}; return { addLeaseChoices };`)();
@@ -641,8 +641,67 @@ NODE
 		const expected = [ "192.0.2.10", "2001:db8::10", "2001:db8::20" ];
 		if (JSON.stringify(choices) !== JSON.stringify(expected))
 			throw new Error(`DHCP choices must be unique host addresses without CIDR prefixes: ${JSON.stringify(choices)}`);
-		if (!source.includes(`o.datatype = '"'"'or(hostname,ipaddr("nomask"))'"'"';`))
+		if (!source.includes(`target.datatype = '"'"'or(hostname,ipaddr("nomask"))'"'"';`))
 			throw new Error("manual targets must reject IP prefix notation");
+		const target = source.slice(source.indexOf("const target ="),
+			source.indexOf("\n\n\to = s.option(GroupedInterfaceValue"));
+		if (!target.includes("addLeaseChoices(target, leaseInfo)") ||
+			!target.includes("target.depends('"'"'type'"'"', '"'"'ping'"'"')") ||
+			!target.includes("target.depends('"'"'type'"'"', '"'"'tcp'"'"')"))
+			throw new Error("manual and DHCP host targets must remain available only for ping and TCP");
+	' "$monitors" || fail=1
+
+	node -e '
+		const source = require("fs").readFileSync(process.argv[1], "utf8");
+		const clean = source.indexOf("function cleanChoiceText");
+		const begin = source.indexOf("function normalizeInterfaceGroups");
+		const end = source.indexOf("\n\nconst GroupedInterfaceValue", begin);
+		if (clean < 0 || begin < 0 || end < 0 || clean > begin)
+			throw new Error("unable to load interface choice helper");
+		String.prototype.format = function(...values) {
+			let index = 0;
+			return this.replace(/%s/g, () => String(values[index++]));
+		};
+		const normalizeInterfaceGroups = Function("_",
+			`const INTERFACE_GROUP_LABELS = {
+				"networks": "OpenWrt networks", "devices": "Linux devices",
+				"wifi-radios": "Wi-Fi radios", "wifi-aps": "Wi-Fi APs / SSIDs"
+			}; ${source.slice(clean, end)}; return normalizeInterfaceGroups;`
+		)(value => value);
+		const groups = normalizeInterfaceGroups({ groups: [ {
+			id: "wifi-aps", label: "RPC supplied group label", items: [
+				{ selector: "wifi-iface:office0", label: "AP: Office — radio0 / office0", state: "up" },
+				{ selector: "wifi-iface:office1", label: "AP: Office — radio1 / office1", state: "disabled" },
+				{ selector: "wifi-iface:office0", label: "duplicate selector", state: "down" },
+				{ selector: "wifi-iface:bad/name", label: "invalid selector", state: "up" }
+			]
+		}, {
+			id: "unknown", label: "Untrusted group", items: [
+				{ selector: "device:eth9", label: "must not appear", state: "up" }
+			]
+		}, {
+			id: "constructor", label: "Inherited object key", items: [
+				{ selector: "network:prototype", label: "must not inherit", state: "up" }
+			]
+		}, {
+			id: "devices", label: "Ignored remote title", items: [
+				{ selector: "device:eth9", label: `eth9\u0000${"x".repeat(600)}`, state: "absent\u0007" }
+			]
+		} ], errors: [] }, [ "wifi-iface:removed" ]);
+		if (groups.length !== 3 || groups[0].items.length !== 2 ||
+			groups[0].label !== "Wi-Fi APs / SSIDs" ||
+			groups[1].label !== "Linux devices" ||
+			groups[1].items.length !== 1 || groups[1].items[0].label.length > 523 ||
+			/[\x00-\x1f\x7f]/.test(groups[1].items[0].label) ||
+			groups[2].items[0].selector !== "wifi-iface:removed" ||
+			!groups[2].items[0].label.includes("Missing:"))
+			throw new Error("custom, duplicate, disabled, missing, or sanitized choices were not preserved");
+		if (groups.some(group => group.items.some(item => item.selector === "wifi-iface:bad/name" ||
+			item.label.includes("must not appear") || item.label.includes("must not inherit") ||
+			item.label.includes("duplicate selector"))))
+			throw new Error("invalid, unknown-group, or duplicate RPC choices were accepted");
+		if (source.includes("innerHTML") || /interface_selector[^;\n]*editable/.test(source))
+			throw new Error("interface choices must use safe DOM construction without custom entry");
 	' "$monitors" || fail=1
 
 	for declaration in \
@@ -655,6 +714,13 @@ NODE
 		'ipaddr' \
 		'ip6addr' \
 		'ip6addrs' \
+		"object: 'netwatch', method: 'interfaces', expect: { '': {} }" \
+		"o.value('interface', _('Interface state'))" \
+		"form.ListValue.extend" \
+		"GroupedInterfaceValue, 'interface_selector'" \
+		"o.depends('type', 'interface')" \
+		"Missing: %s" \
+		"E('optgroup'" \
 		"form.Value, 'target'" \
 		"range(5,86400)" \
 		"range(1,60)" \

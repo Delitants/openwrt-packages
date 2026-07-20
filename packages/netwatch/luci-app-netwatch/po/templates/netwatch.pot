@@ -140,6 +140,15 @@ msgstr ""
 msgid "Invalid ping response"
 msgstr ""
 
+msgid "Interface inventory is temporarily incomplete. Saved selections are preserved."
+msgstr ""
+
+msgid "Interface or Wi-Fi AP"
+msgstr ""
+
+msgid "Interface state"
+msgstr ""
+
 msgid "Last check"
 msgstr ""
 
@@ -147,6 +156,9 @@ msgid "Leave the placeholder unchanged to keep the stored password."
 msgstr ""
 
 msgid "Live status is temporarily unavailable."
+msgstr ""
+
+msgid "Linux devices"
 msgstr ""
 
 msgid "Mail retry backoff"
@@ -164,10 +176,16 @@ msgstr ""
 msgid "Milliseconds."
 msgstr ""
 
+msgid "Missing selections"
+msgstr ""
+
+msgid "Missing: %s"
+msgstr ""
+
 msgid "Monitor"
 msgstr ""
 
-msgid "Monitor DHCP clients or manually entered IP addresses and host names."
+msgid "Monitor hosts, TCP services, OpenWrt networks, Linux devices, Wi-Fi radios, and APs."
 msgstr ""
 
 msgid "Monitors"
@@ -207,6 +225,9 @@ msgid "Notifications"
 msgstr ""
 
 msgid "One time"
+msgstr ""
+
+msgid "OpenWrt networks"
 msgstr ""
 
 msgid "Optional label"
@@ -278,6 +299,12 @@ msgstr ""
 msgid "Select an active DHCP lease or enter a target manually."
 msgstr ""
 
+msgid "Select an OpenWrt network, Linux device, Wi-Fi radio, or AP/SSID."
+msgstr ""
+
+msgid "Select an interface."
+msgstr ""
+
 msgid "Send recovery email"
 msgstr ""
 
@@ -342,4 +369,10 @@ msgid "Unknown"
 msgstr ""
 
 msgid "Username"
+msgstr ""
+
+msgid "Wi-Fi APs / SSIDs"
+msgstr ""
+
+msgid "Wi-Fi radios"
 msgstr ""
