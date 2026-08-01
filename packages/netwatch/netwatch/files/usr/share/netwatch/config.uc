@@ -129,6 +129,10 @@ export function normalize_smtp(raw) {
 		server: plain_string(raw.server, ''),
 		port: default_integer(raw.port, 1, 65535, 587),
 		tls: raw.tls in TLS ? raw.tls : 'starttls',
+		tls_insecure: uci_bool(
+			has_line_break(raw.tls_insecure) ? null : raw.tls_insecure,
+			false
+		),
 		username: plain_string(raw.username, ''),
 		password: plain_string(raw.password, ''),
 		from: plain_string(raw.from, ''),

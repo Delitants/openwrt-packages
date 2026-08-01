@@ -43,6 +43,14 @@ deep_equal(ordered, reversed, 'deep equality ignores object key order');
 let smtp = normalize_smtp({ port: '465', tls: 'tls' });
 equal(smtp.port, 465, 'SMTP port normalized');
 equal(smtp.tls, 'tls', 'SMTP TLS normalized');
+equal(normalize_smtp({}).tls_insecure, false,
+	'SMTP certificate bypass defaults off');
+equal(normalize_smtp({ tls_insecure: '1' }).tls_insecure, true,
+	'SMTP certificate bypass accepts enabled UCI flag');
+equal(normalize_smtp({ tls_insecure: '0' }).tls_insecure, false,
+	'SMTP certificate bypass accepts disabled UCI flag');
+equal(normalize_smtp({ tls_insecure: '1\n0' }).tls_insecure, false,
+	'SMTP certificate bypass rejects malformed value safely');
 
 equal(valid_target('router.example\ninvalid'), false, 'target newline rejected');
 equal(normalize_monitor('bad', {

@@ -101,6 +101,8 @@ truthy(match(msmtp, /(^|\n)tls_starttls on(\n|$)/), 'STARTTLS mode enabled');
 truthy(match(msmtp,
 	/(^|\n)tls_trust_file \/etc\/ssl\/certs\/ca-certificates\.crt(\n|$)/),
 	'CA trust store configured');
+truthy(match(msmtp, /(^|\n)tls_certcheck on(\n|$)/),
+	'verified TLS explicitly checks certificates');
 truthy(match(msmtp, /(^|\n)syslog LOG_MAIL(\n|$)/), 'mail facility logging configured');
 truthy(match(msmtp, /(^|\n)auth on(\n|$)/), 'authentication enabled with credentials');
 truthy(match(msmtp, /(^|\n)user router-user(\n|$)/), 'authentication user rendered');
@@ -111,6 +113,12 @@ let implicit = render_msmtp({ ...smtp, tls: 'tls' });
 truthy(match(implicit, /(^|\n)tls on(\n|$)/), 'implicit TLS enables TLS');
 truthy(match(implicit, /(^|\n)tls_starttls off(\n|$)/),
 	'implicit TLS disables STARTTLS upgrade');
+
+let insecure = render_msmtp({ ...smtp, tls: 'tls', tls_insecure: true });
+truthy(match(insecure, /(^|\n)tls_certcheck off(\n|$)/),
+	'explicit bypass disables certificate checking');
+equal(match(insecure, /(^|\n)tls_trust_file /), null,
+	'bypass does not configure an ignored trust file');
 
 let anonymous = render_msmtp({
 	...smtp, username: 'router-user', password: ''
@@ -124,6 +132,10 @@ let no_tls = render_msmtp({
 truthy(match(no_tls, /(^|\n)tls off(\n|$)/), 'disabled TLS rendered explicitly');
 equal(match(no_tls, /(^|\n)tls_starttls /), null,
 	'disabled TLS omits STARTTLS setting');
+equal(match(no_tls, /(^|\n)tls_certcheck /), null,
+	'disabled TLS omits certificate checking');
+equal(match(no_tls, /(^|\n)tls_trust_file /), null,
+	'disabled TLS omits certificate trust');
 
 rejected(() => render_msmtp({ ...smtp, server: 'smtp.example.test\npassword stolen' }),
 	'msmtp line injection rejected');

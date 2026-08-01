@@ -239,7 +239,14 @@ export function render_msmtp(smtp) {
 		push(lines, `tls_starttls ${smtp.tls == 'starttls' ? 'on' : 'off'}`);
 	}
 
-	push(lines, 'tls_trust_file /etc/ssl/certs/ca-certificates.crt');
+	if (smtp.tls != 'none') {
+		if (smtp.tls_insecure === true)
+			push(lines, 'tls_certcheck off');
+		else {
+			push(lines, 'tls_certcheck on');
+			push(lines, 'tls_trust_file /etc/ssl/certs/ca-certificates.crt');
+		}
+	}
 	push(lines, 'syslog LOG_MAIL');
 	push(lines, '');
 	push(lines, 'account netwatch');
