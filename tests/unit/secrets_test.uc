@@ -51,9 +51,53 @@ deep_equal(legacy_only.events, [
 equal(legacy_only.values['netwatch.smtp.password'], null,
 	'legacy public password is removed');
 
-let already_migrated = fake_cursor('private-current-value', 'stale-public-value');
+let long_legacy_value = '';
+for (let index = 0; index < 1500; index++)
+	long_legacy_value += 'p';
+let long_legacy = fake_cursor(null, long_legacy_value);
+equal(valid_smtp_password(long_legacy_value), false,
+	'new password input remains bounded independently of migration');
+equal(migrate_smtp_password(long_legacy.cursor), long_legacy_value,
+	'previously usable long legacy password remains exact');
+deep_equal(long_legacy.events, [
+	[ 'set', 'netwatch-secrets', 'smtp', 'password', long_legacy_value ],
+	[ 'commit', 'netwatch-secrets' ],
+	[ 'delete', 'netwatch', 'smtp', 'password' ],
+	[ 'commit', 'netwatch' ]
+], 'long legacy password is committed exactly before public deletion');
+
+let empty_legacy = fake_cursor(null, '');
+equal(migrate_smtp_password(empty_legacy.cursor), '',
+	'explicit empty legacy value retains anonymous SMTP behavior');
+deep_equal(empty_legacy.events, [
+	[ 'set', 'netwatch-secrets', 'smtp', 'password', '' ],
+	[ 'commit', 'netwatch-secrets' ],
+	[ 'delete', 'netwatch', 'smtp', 'password' ],
+	[ 'commit', 'netwatch' ]
+], 'empty legacy value is also committed exactly before public cleanup');
+
+let invalid_legacy = fake_cursor(null, 'legacy\nnot-usable');
+let invalid_failed = false;
+try { migrate_smtp_password(invalid_legacy.cursor); }
+catch (error) { invalid_failed = true; }
+truthy(invalid_failed, 'invalid legacy migration aborts');
+deep_equal(invalid_legacy.events, [],
+	'invalid legacy value is never deleted without a private commit');
+equal(invalid_legacy.values['netwatch.smtp.password'], 'legacy\nnot-usable',
+	'aborted migration preserves legacy data');
+
+let conflicting = fake_cursor('private-current-value', 'different-public-value');
+let conflict_failed = false;
+try { migrate_smtp_password(conflicting.cursor); }
+catch (error) { conflict_failed = true; }
+truthy(conflict_failed, 'conflicting private and legacy values abort migration');
+deep_equal(conflicting.events, [], 'conflict does not delete either value');
+equal(conflicting.values['netwatch.smtp.password'], 'different-public-value',
+	'conflicting legacy value is preserved');
+
+let already_migrated = fake_cursor('private-current-value', 'private-current-value');
 equal(migrate_smtp_password(already_migrated.cursor), 'private-current-value',
-	'private password wins over stale legacy value');
+	'exact previously committed private password is reused');
 deep_equal(already_migrated.events, [
 	[ 'delete', 'netwatch', 'smtp', 'password' ],
 	[ 'commit', 'netwatch' ]
