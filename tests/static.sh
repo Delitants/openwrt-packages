@@ -46,6 +46,7 @@ require_file tests/in-sdk-behavior_test.sh
 require_file tests/in-sdk-source_test.sh
 require_file tests/package-output_test.sh
 require_file tests/upgrade-activation_test.sh
+require_file tests/unit/message_string_test.uc
 
 for selector in CONFIG_ALL CONFIG_ALL_KMODS CONFIG_ALL_NONSHARED; do
 	if ! grep -Fq -- "# $selector is not set" \

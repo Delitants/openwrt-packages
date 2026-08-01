@@ -172,9 +172,29 @@ function display_name(value) {
 	return replace(replace(value, /\\/g, '\\\\'), /"/g, '\\"');
 };
 
+function parse_recipients(value) {
+	safe_text(value, 'recipients', false);
+
+	let recipients = [];
+
+	for (let address in split(value, ',')) {
+		address = trim(address);
+
+		if (!valid_address(address))
+			die('recipient is invalid');
+
+		push(recipients, address);
+	}
+
+	if (!length(recipients))
+		die('recipients must not be empty');
+
+	return recipients;
+};
+
 function message_recipients(value) {
 	if (type(value) == 'string')
-		return split_recipients(value);
+		return parse_recipients(value);
 
 	if (type(value) != 'array' || !length(value))
 		die('recipients must not be empty');
@@ -194,23 +214,7 @@ function message_recipients(value) {
 };
 
 export function split_recipients(value) {
-	safe_text(value, 'recipients', false);
-
-	let recipients = [];
-
-	for (let address in split(value, ',')) {
-		address = trim(address);
-
-		if (!valid_address(address))
-			die('recipient is invalid');
-
-		push(recipients, address);
-	}
-
-	if (!length(recipients))
-		die('recipients must not be empty');
-
-	return recipients;
+	return parse_recipients(value);
 };
 
 export function render_msmtp(smtp) {
