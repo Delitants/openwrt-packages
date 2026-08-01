@@ -47,14 +47,14 @@ SHA-256
 The build script starts from a fresh package configuration so stale SDK-wide
 package selections cannot leak into the build. The packaging script publishes:
 
-- `outputs/netwatch_1.1.0-r1_all.apk`
-- `outputs/luci-app-netwatch_1.1.0-r1_all.apk`
+- `outputs/netwatch_1.1.0-r2_all.apk`
+- `outputs/luci-app-netwatch_1.1.0-r2_all.apk`
 - `outputs/luci-app-scheduled-backup_1.0.0-r3_all.apk`
 - `outputs/openwrt-netwatch-1.1.0-source.tar.gz`
 - `outputs/SHA256SUMS`
 
-These are the published 1.1.0 release outputs. The signed feed contains
-`netwatch-1.1.0-r1` and `luci-app-netwatch-1.1.0-r1`.
+These are the published 1.1.0-r2 release outputs. The signed feed contains
+`netwatch-1.1.0-r2` and `luci-app-netwatch-1.1.0-r2`.
 
 ## Build verification
 
@@ -73,7 +73,10 @@ verified with its apk-tools 3.0.5. The exact replayable verification is:
   tests/unit/state_test.uc \
   tests/unit/store_test.uc \
   tests/unit/alerts_test.uc \
-  tests/unit/message_test.uc
+  tests/unit/message_test.uc \
+  tests/unit/mail_test_test.uc \
+  tests/unit/rpc_test.uc \
+  tests/unit/secrets_test.uc
 ./tests/package-output_test.sh
 ./tests/static.sh
 ./scripts/verify-artifacts.sh
@@ -85,15 +88,15 @@ For direct inspection of the two raw manifests, run:
 
 ```sh
 ./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
-  /src/outputs/netwatch_1.1.0-r1_all.apk | jq .info
+  /src/outputs/netwatch_1.1.0-r2_all.apk | jq .info
 ./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
-  /src/outputs/luci-app-netwatch_1.1.0-r1_all.apk | jq .info
+  /src/outputs/luci-app-netwatch_1.1.0-r2_all.apk | jq .info
 shasum -a 256 -c outputs/SHA256SUMS
 ```
 
 The source suite covers fourteen unit groups, stable package output generation,
 static/ucode checks, and artifact inspection. The artifact verifier requires
-two `1.1.0-r1` `noarch` manifests. The runtime manifest contains the CA bundle,
+two `1.1.0-r2` `noarch` manifests. The runtime manifest contains the CA bundle,
 `msmtp`, ucode, and all required ucode modules; the LuCI manifest contains
 `luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 21 runtime manifest paths
 and exactly seven LuCI manifest paths must match the expected lists. The
@@ -180,6 +183,21 @@ uci set netwatch.smtp.tls='tls'
 uci commit netwatch
 /etc/init.d/netwatch restart
 ```
+
+If the SMTP server uses a certificate the router cannot validate, the Email
+page exposes **Disable TLS certificate verification (insecure)**. Its UCI
+equivalent is:
+
+```sh
+uci set netwatch.smtp.tls='tls'
+uci set netwatch.smtp.tls_insecure='1'
+uci commit netwatch
+/etc/init.d/netwatch reload
+```
+
+Warning: this bypass disables server-certificate authentication and can permit
+a man-in-the-middle attack. Use it only when the certificate cannot be
+validated normally.
 
 Entering the password in LuCI avoids leaving it in shell history. The Email
 page receives only a stored/not-stored boolean, keeps an empty password input,

@@ -85,7 +85,7 @@ for makefile in \
 	packages/netwatch/netwatch/Makefile \
 	packages/netwatch/luci-app-netwatch/Makefile
 do
-	for declaration in 'PKG_VERSION:=1.1.0' 'PKG_RELEASE:=1'; do
+	for declaration in 'PKG_VERSION:=1.1.0' 'PKG_RELEASE:=2'; do
 		if ! grep -Fq -- "$declaration" "$root/$makefile"; then
 			echo "missing package version declaration in $makefile: $declaration" >&2
 			fail=1
@@ -113,10 +113,10 @@ do
 done
 
 for expectation in \
-	'runtime=outputs/netwatch_1.1.0-r1_all.apk' \
-	'luci=outputs/luci-app-netwatch_1.1.0-r1_all.apk' \
+	'runtime=outputs/netwatch_1.1.0-r2_all.apk' \
+	'luci=outputs/luci-app-netwatch_1.1.0-r2_all.apk' \
 	'source_archive=outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
-	'.info.version == "1.1.0-r1"' \
+	'.info.version == "1.1.0-r2"' \
 	'openwrt-netwatch-1.1.0/README.md'
 do
 	if ! grep -Fq -- "$expectation" "$root/scripts/verify-artifacts.sh"; then
@@ -169,8 +169,8 @@ if [ "$fail" -eq 0 ]; then
 	for text in \
 		'OpenWrt 25.12.5' \
 		'x86/64' \
-		'outputs/netwatch_1.1.0-r1_all.apk' \
-		'outputs/luci-app-netwatch_1.1.0-r1_all.apk' \
+		'outputs/netwatch_1.1.0-r2_all.apk' \
+		'outputs/luci-app-netwatch_1.1.0-r2_all.apk' \
 		'outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
 		'21 runtime manifest paths' \
 		'exactly seven LuCI manifest paths' \
@@ -187,6 +187,10 @@ if [ "$fail" -eq 0 ]; then
 		'optional iwinfo' \
 		'port 587 with STARTTLS' \
 		'port 465 with implicit TLS' \
+		"uci set netwatch.smtp.tls='tls'" \
+		"uci set netwatch.smtp.tls_insecure='1'" \
+		'Disable TLS certificate verification (insecure)' \
+		'bypass disables server-certificate authentication' \
 		'Active incidents and their email counters reset after a router reboot.' \
 		'/etc/init.d/netwatch restart' \
 		'ubus call netwatch status' \
@@ -218,8 +222,8 @@ const verification = section('Build verification', 'Install');
 const configure = section('Configure', 'Package feed maintenance');
 const errors = [];
 
-if (!build.includes('These are the published 1.1.0 release outputs.') ||
-	!build.includes('The signed feed contains `netwatch-1.1.0-r1` and `luci-app-netwatch-1.1.0-r1`.'))
+if (!build.includes('These are the published 1.1.0-r2 release outputs.') ||
+	!build.includes('The signed feed contains `netwatch-1.1.0-r2` and `luci-app-netwatch-1.1.0-r2`.'))
 	errors.push('README must identify the published 1.1.0 outputs and signed feed versions');
 
 if (!verification.startsWith('## Build verification Release artifacts were built with the pinned OpenWrt 25.12.5 x86/64 SDK and verified with its apk-tools 3.0.5.'))
