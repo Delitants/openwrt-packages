@@ -502,7 +502,6 @@ NODE
 		"import { collect_interface_inventory } from 'interfaces';" \
 		"import { start_diagnostics } from 'diagnostics';" \
 		'interfaces:' \
-		'call: request_interfaces' \
 		'start_diagnostics(monitor, state.last_result' \
 		'diagnostic start selector' \
 		"Diagnostic collection incomplete"
