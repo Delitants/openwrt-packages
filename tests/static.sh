@@ -46,6 +46,7 @@ require_file tests/in-sdk-behavior_test.sh
 require_file tests/in-sdk-source_test.sh
 require_file tests/package-output_test.sh
 require_file tests/upgrade-activation_test.sh
+require_file tests/luci-monitors_test.js
 require_file tests/unit/message_string_test.uc
 
 for selector in CONFIG_ALL CONFIG_ALL_KMODS CONFIG_ALL_NONSHARED; do
@@ -67,6 +68,7 @@ if [ "$fail" -eq 0 ]; then
 	"$root/tests/in-sdk-source_test.sh" || fail=1
 	"$root/tests/package-output_test.sh" || fail=1
 	"$root/tests/upgrade-activation_test.sh" || fail=1
+	node "$root/tests/luci-monitors_test.js" || fail=1
 fi
 
 if ! grep -Fq '# call BuildPackage - OpenWrt buildroot signature' \

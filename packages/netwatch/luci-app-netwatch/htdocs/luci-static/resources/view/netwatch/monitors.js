@@ -55,9 +55,10 @@ function cleanChoiceText(value, fallback) {
 		: fallback;
 }
 
-function normalizeInterfaceGroups(inventory, savedSelectors) {
+function normalizeInterfaceGroups(inventory, savedSelectors, labels) {
 	const groups = [];
 	const seen = Object.create(null);
+	labels = labels || Object.create(null);
 	const input = inventory && Array.isArray(inventory.groups) ? inventory.groups : [];
 
 	for (const group of input) {
@@ -72,9 +73,11 @@ function normalizeInterfaceGroups(inventory, savedSelectors) {
 				continue;
 			seen[item.selector] = true;
 			const state = cleanChoiceText(item.state, 'unknown');
+			const label = '%s (%s)'.format(cleanChoiceText(item.label, item.selector), state);
+			labels[item.selector] = label;
 			items.push({
 				selector: item.selector,
-				label: '%s (%s)'.format(cleanChoiceText(item.label, item.selector), state)
+				label
 			});
 		}
 		groups.push({ id: group.id, label: INTERFACE_GROUP_LABELS[group.id], items });
@@ -90,6 +93,12 @@ function normalizeInterfaceGroups(inventory, savedSelectors) {
 	if (missing.length)
 		groups.push({ id: 'missing', label: _('Missing selections'), items: missing });
 	return groups;
+}
+
+function targetDisplayValue(type, target, selector, labels) {
+	if (type !== 'interface')
+		return target || _('none');
+	return labels[selector] || (selector ? _('Missing: %s').format(selector) : _('none'));
 }
 
 const GroupedInterfaceValue = form.ListValue.extend({
@@ -123,7 +132,8 @@ return view.extend({
 		const savedSelectors = uci.sections('netwatch', 'monitor')
 			.map(monitor => monitor.interface_selector)
 			.filter(value => typeof(value) === 'string' && value !== '');
-		const interfaceGroups = normalizeInterfaceGroups(data[2], savedSelectors);
+		const interfaceLabels = Object.create(null);
+		const interfaceGroups = normalizeInterfaceGroups(data[2], savedSelectors, interfaceLabels);
 		const inventoryErrors = data[2] && Array.isArray(data[2].errors) ? data[2].errors : [];
 		const m = new form.Map('netwatch', _('Netwatch monitors'),
 			_('Monitor hosts, TCP services, OpenWrt networks, Linux devices, Wi-Fi radios, and APs.'));
@@ -154,9 +164,21 @@ return view.extend({
 			_('Select an active DHCP lease or enter a target manually.'));
 		target.datatype = 'or(hostname,ipaddr("nomask"))';
 		target.rmempty = false;
+		target.modalonly = true;
 		addLeaseChoices(target, leaseInfo);
 		target.depends('type', 'ping');
 		target.depends('type', 'tcp');
+
+		o = s.option(form.DummyValue, '_display_target', _('Target'));
+		o.write = null;
+		o.remove = null;
+		o.textvalue = function(sectionId) {
+			return targetDisplayValue(
+				uci.get('netwatch', sectionId, 'type'),
+				uci.get('netwatch', sectionId, 'target'),
+				uci.get('netwatch', sectionId, 'interface_selector'),
+				interfaceLabels);
+		};
 
 		o = s.option(GroupedInterfaceValue, 'interface_selector', _('Interface or Wi-Fi AP'),
 			inventoryErrors.length
