@@ -17,18 +17,21 @@
 - RPC and UI error strings remain fixed and secret-free.
 - Existing monitor configuration, incident behavior, interface diagnostics, feed URL, and public key remain compatible.
 - Use test-first red/green cycles for every production behavior change.
+- Test observable behavior with executable ucode or JavaScript harnesses; reserve source-text assertions for package layout and security-boundary contracts that cannot execute on the build host.
 - Use `git --git-dir=work/git-metadata --work-tree=.` for repository operations from the primary checkout.
 
 ## File responsibility map
 
 - `packages/netwatch/netwatch/files/usr/share/netwatch/config.uc`: normalize UCI booleans and SMTP configuration.
 - `packages/netwatch/netwatch/files/usr/share/netwatch/message.uc`: render safe msmtp configuration.
+- `packages/netwatch/netwatch/files/usr/share/netwatch/rpc.uc`: construct the published ubus method table with LuCI-compatible schemas.
 - `packages/netwatch/netwatch/files/usr/share/netwatch/mail_test.uc`: own the bounded test-email lifecycle state.
 - `packages/netwatch/netwatch/files/usr/share/netwatch/store.uc`: expose bounded public daemon status.
 - `packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc`: publish ubus methods and orchestrate delivery.
 - `packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js`: render SMTP controls and poll test status.
 - `packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js`: keep status usable when inventory is unavailable.
-- `tests/unit/*.uc` and `tests/static.sh`: behavior and cross-layer regression contracts.
+- `tests/unit/*.uc` and `tests/luci-email_test.js`: executable runtime and LuCI behavior contracts.
+- `tests/static.sh`: package layout, source security boundaries, syntax, and release metadata contracts.
 - `scripts/package-output.sh`, `scripts/verify-artifacts.sh`, `tests/package-output_test.sh`, and `tests/feed_test.sh`: exact `r2` artifact/feed contracts.
 
 ---
@@ -36,75 +39,87 @@
 ### Task 1: LuCI-compatible ubus method schemas
 
 **Files:**
-- Modify: `tests/static.sh`
+- Create: `tests/unit/rpc_test.uc`
+- Create: `packages/netwatch/netwatch/files/usr/share/netwatch/rpc.uc`
 - Modify: `packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc`
 
 **Interfaces:**
 - Consumes: LuCI's authenticated controller behavior, which adds string `ubus_rpc_session` to the method argument table.
 - Produces: `status`, `interfaces`, `check`, and `test_email` schemas that accept and ignore that field.
 
-- [ ] **Step 1: Add the failing schema regression test**
+- [ ] **Step 1: Add the failing executable schema regression test**
 
-Extend the existing Node-based daemon contract in `tests/static.sh` to require these exact schema fragments and to reject any use of the value outside the publish table:
+Create `tests/unit/rpc_test.uc`. Pass four sentinel handler functions to a wished-for `service_methods()` factory, inspect the returned real method table, and invoke each `call` function to prove the factory preserves the supplied handlers:
 
-```js
-for (const [method, required] of Object.entries({
-  status: [ "ubus_rpc_session: ''" ],
-  interfaces: [ "ubus_rpc_session: ''" ],
-  check: [ "id: ''", "ubus_rpc_session: ''" ],
-  test_email: [ "recipient: ''", "ubus_rpc_session: ''" ]
-})) {
-  const body = methodBody(source, method);
-  for (const declaration of required)
-    if (!body.includes(declaration))
-      throw new Error(`${method} does not accept LuCI's injected session argument`);
-}
+```ucode
+import { deep_equal, equal } from 'test';
+import { service_methods } from 'rpc';
+
+let calls = [];
+let handlers = {
+  status: (request) => push(calls, [ 'status', request.args ]),
+  interfaces: (request) => push(calls, [ 'interfaces', request.args ]),
+  check: (request) => push(calls, [ 'check', request.args ]),
+  test_email: (request) => push(calls, [ 'test_email', request.args ])
+};
+let methods = service_methods(handlers);
+
+deep_equal(methods.status.args, { ubus_rpc_session: '' },
+  'status accepts LuCI session argument');
+deep_equal(methods.interfaces.args, { ubus_rpc_session: '' },
+  'interfaces accepts LuCI session argument');
+deep_equal(methods.check.args, { id: '', ubus_rpc_session: '' },
+  'check accepts ID and LuCI session argument');
+deep_equal(methods.test_email.args,
+  { recipient: '', ubus_rpc_session: '' },
+  'test email accepts recipient and LuCI session argument');
+
+for (let name in [ 'status', 'interfaces', 'check', 'test_email' ])
+  methods[name].call({ args: { ubus_rpc_session: 'session-only' } });
+equal(length(calls), 4, 'all published handlers remain callable');
 ```
-
-Also assert that the source contains no `request.args?.ubus_rpc_session`, logging format argument, subprocess interpolation, or return property using that name.
 
 - [ ] **Step 2: Run the static suite and verify RED**
 
 Run:
 
 ```sh
-./tests/static.sh
+./tests/run-unit.sh tests/unit/rpc_test.uc
 ```
 
-Expected: FAIL because none of the four published schemas declares `ubus_rpc_session`.
+Expected: FAIL because module `rpc` does not exist.
 
 - [ ] **Step 3: Make the minimal schema change**
 
-Change only the `args` declarations at the bottom of `netwatchd.uc`:
+Create `rpc.uc` as a focused method-table factory:
 
 ```ucode
-status: {
-  args: { ubus_rpc_session: '' },
-  call: (request) => public_status(
-    daemon_started, last_reload, mail_error, mail_test, states)
-},
-interfaces: {
-  args: { ubus_rpc_session: '' },
-  call: request_interfaces
-},
-check: {
-  args: { id: '', ubus_rpc_session: '' },
-  call: request_check
-},
-test_email: {
-  args: { recipient: '', ubus_rpc_session: '' },
-  call: request_test_email
-}
+export function service_methods(handlers) {
+  return {
+    status: {
+      args: { ubus_rpc_session: '' }, call: handlers.status
+    },
+    interfaces: {
+      args: { ubus_rpc_session: '' }, call: handlers.interfaces
+    },
+    check: {
+      args: { id: '', ubus_rpc_session: '' }, call: handlers.check
+    },
+    test_email: {
+      args: { recipient: '', ubus_rpc_session: '' }, call: handlers.test_email
+    }
+  };
+};
 ```
 
-Use the pre-existing `public_status` signature until Task 3; if Task 1 is committed independently, retain the old call arguments in this task and add `mail_test` in Task 3.
+Import `service_methods` in `netwatchd.uc`, build the table with the existing four callbacks, and publish that returned table. Use the pre-existing `public_status` signature until Task 3; add `mail_test` to the status callback in Task 3.
 
 - [ ] **Step 4: Verify GREEN and syntax**
 
 Run:
 
 ```sh
-./tests/static.sh
+./tests/run-unit.sh tests/unit/rpc_test.uc
 ./scripts/in-sdk.sh ucode -c packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc
 ```
 
@@ -114,7 +129,8 @@ Expected: PASS.
 
 ```sh
 git --git-dir=work/git-metadata --work-tree=. add \
-  tests/static.sh \
+  tests/unit/rpc_test.uc \
+  packages/netwatch/netwatch/files/usr/share/netwatch/rpc.uc \
   packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc
 git --git-dir=work/git-metadata --work-tree=. commit -m "fix: accept luci session argument in netwatch rpc"
 ```
@@ -238,7 +254,6 @@ git --git-dir=work/git-metadata --work-tree=. commit -m "feat: add explicit smtp
 - Create: `packages/netwatch/netwatch/files/usr/share/netwatch/mail_test.uc`
 - Modify: `tests/unit/store_test.uc`
 - Modify: `packages/netwatch/netwatch/files/usr/share/netwatch/store.uc`
-- Modify: `tests/static.sh`
 - Modify: `packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc`
 
 **Interfaces:**
@@ -366,19 +381,9 @@ export function write_status(
 
 Update test call sites and verify `tests/unit/store_test.uc` passes.
 
-- [ ] **Step 7: Add failing daemon orchestration contracts**
+- [ ] **Step 7: Extend the lifecycle test for immediate-return orchestration**
 
-Extend `tests/static.sh` to require:
-
-```text
-new_mail_test_tracker
-begin_mail_test
-finish_mail_test
-mail_work_active
-return { ok: true, id: test.id };
-```
-
-It must reject `request.defer()` and `request.reply()` inside `request_test_email`, require `load_configuration()` before rendering the test message, and require the delivery callback to call `finish_mail_test`, update `mail_error`, and persist status.
+Add a `start_mail_test(tracker, now, start_delivery, completed_at, changed)` API to the wished-for module. In `mail_test_test.uc`, supply a fake only for the external delivery process: capture its callback without invoking it, assert that `start_mail_test()` immediately returns `{ ok: true, id: 3 }` while public state remains `sending`, then invoke the captured callback and assert terminal state and one `changed` notification. Add a second starter returning false and assert immediate fixed failure state. This test must fail before production code is changed.
 
 - [ ] **Step 8: Implement immediate-return orchestration**
 
@@ -386,7 +391,7 @@ In `netwatchd.uc`:
 
 ```ucode
 import {
-  new_mail_test_tracker, begin_mail_test, finish_mail_test
+  new_mail_test_tracker, begin_mail_test, finish_mail_test, start_mail_test
 } from 'mail_test';
 
 let mail_test = new_mail_test_tracker();
@@ -401,16 +406,16 @@ function mail_work_active() {
 
 Pass `mail_test` through `persist_status()`, `public_status()`, and `write_status()`. Make `start_alert()` return false while `mail_work_active()` is true so a test and an alert cannot overlap.
 
+Implement `start_mail_test()` in the module using `begin_mail_test()` and `finish_mail_test()`. It must return before the captured delivery callback runs and invoke `changed(public_mail_test(tracker))` after starting and after completion.
+
 Rewrite `request_test_email()` in this order:
 
 1. Reject shutdown and `mail_work_active()`.
 2. Call `load_configuration()` and reject a failed reload.
 3. Validate mail configuration and recipient exactly as before.
 4. Render the message.
-5. Call `begin_mail_test(mail_test, time())` and persist `sending`.
-6. Start delivery with a callback that calls `finish_mail_test`, sets `mail_error`, and persists.
-7. If process startup fails, finish the same ID as failed and return the fixed failure.
-8. Otherwise return `{ ok: true, id: test.id }` without deferring the request.
+5. Call `start_mail_test()` with the real `start_delivery` adapter, `time`, and a change callback that updates `mail_error` and persists status.
+6. Return the helper's `{ ok, id }` result directly without deferring the request.
 
 - [ ] **Step 9: Verify backend GREEN**
 
@@ -418,7 +423,6 @@ Run:
 
 ```sh
 ./tests/run-unit.sh tests/unit/mail_test_test.uc tests/unit/store_test.uc
-./tests/static.sh
 ```
 
 Expected: PASS.
@@ -427,7 +431,7 @@ Expected: PASS.
 
 ```sh
 git --git-dir=work/git-metadata --work-tree=. add \
-  tests/unit/mail_test_test.uc tests/unit/store_test.uc tests/static.sh \
+  tests/unit/mail_test_test.uc tests/unit/store_test.uc \
   packages/netwatch/netwatch/files/usr/share/netwatch/mail_test.uc \
   packages/netwatch/netwatch/files/usr/share/netwatch/store.uc \
   packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc
@@ -439,7 +443,7 @@ git --git-dir=work/git-metadata --work-tree=. commit -m "fix: report test email 
 ### Task 4: LuCI SMTP and test-email UX
 
 **Files:**
-- Modify: `tests/static.sh`
+- Create: `tests/luci-email_test.js`
 - Modify: `packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js`
 - Modify: `packages/netwatch/luci-app-netwatch/po/templates/netwatch.pot`
 
@@ -447,26 +451,24 @@ git --git-dir=work/git-metadata --work-tree=. commit -m "fix: report test email 
 - Consumes: UCI `tls_insecure`; `test_email -> { ok, id }`; `status.mail_test` terminal states.
 - Produces: default-off insecure checkbox, secret-safe password input, and bounded status polling.
 
-- [ ] **Step 1: Replace the old static expectations with failing UX contracts**
+- [ ] **Step 1: Create a failing LuCI behavior harness**
 
-Require `email.js` to contain:
+Create `tests/luci-email_test.js`. Evaluate the real `email.js` inside `new Function()` with small LuCI stubs that record `form.Flag`/`form.Value` options, UCI writes, RPC declarations/calls, notifications, and timer callbacks. The test must assert observable behavior:
 
-```text
-form.Flag, 'tls_insecure'
-Disable TLS certificate verification (insecure)
-object: 'netwatch', method: 'status'
-waitForMailTest
-Stored password unchanged
-```
+1. Rendering with an existing stored password gives the password option an empty `cfgvalue`, a stored-password placeholder, and no write when the submitted value is empty.
+2. A newly submitted password is written unchanged and can therefore be revealed by the normal password widget.
+3. `tls_insecure` defaults disabled and declares dependencies for `starttls` and `tls`, but not `none`.
+4. A test-email click calls save, apply, `test_email`, then `status`; the button remains disabled while status is `sending` and is re-enabled only after matching state `sent`, `failed`, or bounded timeout.
+5. Notifications contain only the fixed UI strings supplied by the view, even when RPC stubs reject with a secret-bearing exception.
 
-Reject `PASSWORD_PLACEHOLDER`, `********`, `request.defer`, and any direct display of `result.error` or RPC exception text. Require `tls_insecure` to depend on both `starttls` and `tls`.
+Use literal expected option names, state values, and notification strings. The harness may fake RPC/timers because those are the external boundaries; it must execute the real view code and option callbacks.
 
 - [ ] **Step 2: Run static tests and verify RED**
 
 Run:
 
 ```sh
-./tests/static.sh
+node tests/luci-email_test.js
 ```
 
 Expected: FAIL on the missing checkbox, polling helper, and password behavior.
@@ -544,6 +546,7 @@ Run:
 
 ```sh
 ./tests/static.sh
+node tests/luci-email_test.js
 node --check packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js
 ```
 
@@ -553,7 +556,7 @@ Expected: PASS.
 
 ```sh
 git --git-dir=work/git-metadata --work-tree=. add \
-  tests/static.sh \
+  tests/luci-email_test.js \
   packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js \
   packages/netwatch/luci-app-netwatch/po/templates/netwatch.pot
 git --git-dir=work/git-metadata --work-tree=. commit -m "fix: make netwatch email testing reliable"
@@ -594,7 +597,7 @@ Expected: FAIL because `scripts/package-output.sh` still searches for `r1` APKs.
 
 Set `PKG_RELEASE:=2` in both Netwatch Makefiles. Replace the Netwatch-only `r1` paths and manifest versions in `scripts/package-output.sh` and `scripts/verify-artifacts.sh` with `r2`.
 
-Add `usr/share/netwatch/mail_test.uc` to the exact runtime manifest in `scripts/verify-artifacts.sh`.
+Add `usr/share/netwatch/mail_test.uc` and `usr/share/netwatch/rpc.uc` to the exact runtime manifest in `scripts/verify-artifacts.sh`.
 
 - [ ] **Step 4: Update documentation and static release assertions**
 
@@ -663,7 +666,9 @@ git --git-dir=work/git-metadata --work-tree=. commit -m "build: prepare netwatch
   tests/unit/store_test.uc \
   tests/unit/alerts_test.uc \
   tests/unit/message_test.uc \
-  tests/unit/mail_test_test.uc
+  tests/unit/mail_test_test.uc \
+  tests/unit/rpc_test.uc
+node tests/luci-email_test.js
 ./tests/package-output_test.sh
 ./tests/static.sh
 ./tests/repository-layout_test.sh
