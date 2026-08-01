@@ -80,6 +80,14 @@ deep_equal(classify_mail_failure(77,
 	exit_code: 77, exit_name: 'EX_NOPERM', smtp_status: 535
 }, 'authentication error classified');
 
+// Production bug caught: credential redaction erases an authorization diagnostic.
+deep_equal(classify_mail_failure(1,
+	'msmtp: authorization failed', false, null), {
+	stage: 'auth', summary: 'SMTP authentication failed.',
+	detail: 'authorization failed',
+	exit_code: 1, exit_name: null, smtp_status: null
+}, 'authorization failure phrase remains classifiable');
+
 // Production bug caught: a parsed permanent SMTP rejection is ignored.
 deep_equal(classify_mail_failure(75,
 	'msmtp: server message: 550 5.1.1 recipient rejected', false, 550), {
@@ -150,6 +158,15 @@ let authorization = classify_mail_failure(1,
 equal(authorization.detail,
 	'server refused request [REDACTED CREDENTIALS]',
 	'complete Authorization value redacted and useful detail retained');
+
+let whitespace_authorization = classify_mail_failure(1,
+	'msmtp: Authorization Bearer whitespace-session-token\nserver refused request',
+	false, null);
+
+// Production bug caught: preserving diagnostics exposes whitespace Authorization tokens.
+equal(whitespace_authorization.detail,
+	'server refused request [REDACTED CREDENTIALS]',
+	'whitespace Authorization bearer value remains fully redacted');
 
 let private_key = classify_mail_failure(75,
 	'msmtp: TLS failed\n-----BEGIN PRIVATE KEY-----\n' +
