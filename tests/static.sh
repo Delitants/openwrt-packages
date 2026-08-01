@@ -13,10 +13,11 @@ require_file() {
 
 require_file packages/netwatch/netwatch/Makefile
 require_file packages/netwatch/netwatch/files/etc/config/netwatch
+require_file packages/netwatch/netwatch/files/etc/config/netwatch-secrets
 require_file packages/netwatch/netwatch/files/etc/init.d/netwatch
 for module in \
-	alerts config diagnostics interface_probe interfaces message netwatchd ping \
-	probe result state store
+	alerts config diagnostics interface_probe interfaces mail_test message \
+	netwatchd ping probe result rpc secrets state store
 do
 	require_file "packages/netwatch/netwatch/files/usr/share/netwatch/$module.uc"
 done
@@ -125,8 +126,8 @@ do
 done
 
 for module in \
-	alerts config diagnostics interface_probe interfaces message netwatchd ping \
-	probe result state store
+	alerts config diagnostics interface_probe interfaces mail_test message \
+	netwatchd ping probe result rpc secrets state store
 do
 	if ! grep -Fq -- "usr/share/netwatch/$module.uc" \
 		"$root/scripts/verify-artifacts.sh"; then
@@ -145,8 +146,8 @@ luci_manifest_count=$(awk '
 	luci && /^[[:space:]]*'\''[^'\'']+'\''/ { count++ }
 	luci && /luci-files\.expected/ { print count; exit }
 ' "$root/scripts/verify-artifacts.sh")
-if [ "$runtime_manifest_count" != 17 ] || [ "$luci_manifest_count" != 7 ]; then
-	echo "artifact manifest counts are not exactly 17 runtime and 7 LuCI paths: $runtime_manifest_count/$luci_manifest_count" >&2
+if [ "$runtime_manifest_count" != 21 ] || [ "$luci_manifest_count" != 7 ]; then
+	echo "artifact manifest counts are not exactly 21 runtime and 7 LuCI paths: $runtime_manifest_count/$luci_manifest_count" >&2
 	fail=1
 fi
 
@@ -171,7 +172,7 @@ if [ "$fail" -eq 0 ]; then
 		'outputs/netwatch_1.1.0-r1_all.apk' \
 		'outputs/luci-app-netwatch_1.1.0-r1_all.apk' \
 		'outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
-		'17 runtime manifest paths' \
+		'21 runtime manifest paths' \
 		'exactly seven LuCI manifest paths' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/keys/netwatch-local.pem' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/feed/x86_64/packages.adb' \
@@ -613,7 +614,7 @@ NODE
 		fail=1
 	fi
 
-	if grep -Ein 'password|username|server|recipient|smtp' \
+	if grep -Ein 'username|server|recipient|smtp|password([^_]|$)' \
 		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/store.uc"; then
 		echo 'private field found in public status construction' >&2
 		fail=1
@@ -663,7 +664,7 @@ NODE
 				netwatch: ["status", "interfaces"]
 			}) ||
 			!same(grant.write?.uci, ["netwatch"]) ||
-			!same(grant.write?.ubus, { netwatch: ["check", "test_email"] }))
+			!same(grant.write?.ubus, { netwatch: ["check", "test_email", "set_password"] }))
 			throw new Error("ACL is not the exact least-privilege Netwatch grant");
 	' "$acl" || fail=1
 
@@ -1129,6 +1130,7 @@ NODE
 		'o.password = true;' \
 		"form.Flag, '_clear_password'" \
 		"object: 'netwatch', method: 'test_email', params: [ 'recipient' ]" \
+		"object: 'netwatch', method: 'set_password', params: [ 'action', 'password' ]" \
 		'm.save(null, true)' \
 		'uci.apply()' \
 		'callTestEmail(recipient)' \
@@ -1165,6 +1167,18 @@ NODE
 
 	if grep -Eq 'callTestEmail\([^)]*(password|smtp|config)' "$email"; then
 		echo 'test email RPC receives SMTP configuration or password' >&2
+		fail=1
+	fi
+
+	if grep -Eq "uci[.](get|set|unset)[^;]*password|uci[.]load[(][^)]*netwatch-secrets" \
+		"$email"; then
+		echo 'email view reads or writes secret UCI state in the browser' >&2
+		fail=1
+	fi
+
+	if grep -Eq "option[[:space:]]+password" \
+		"$root/packages/netwatch/netwatch/files/etc/config/netwatch"; then
+		echo 'browser-readable Netwatch default config contains a password' >&2
 		fail=1
 	fi
 

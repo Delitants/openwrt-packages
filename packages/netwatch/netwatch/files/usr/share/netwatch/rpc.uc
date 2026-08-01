@@ -11,6 +11,10 @@ export function service_methods(handlers) {
 		},
 		test_email: {
 			args: { recipient: '', ubus_rpc_session: '' }, call: handlers.test_email
+		},
+		set_password: {
+			args: { action: '', password: '', ubus_rpc_session: '' },
+			call: handlers.set_password
 		}
 	};
 };

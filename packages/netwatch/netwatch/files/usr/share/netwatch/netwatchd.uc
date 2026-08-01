@@ -15,6 +15,10 @@ import {
 } from 'mail_test';
 import { start_probe } from 'probe';
 import { service_methods } from 'rpc';
+import {
+	migrate_smtp_password, replace_smtp_password, clear_smtp_password,
+	valid_smtp_password
+} from 'secrets';
 import { public_status, write_status } from 'store';
 
 const RUNTIME_DIR = '/var/run/netwatch';
@@ -37,6 +41,7 @@ let daemon_started = time();
 let last_reload = daemon_started;
 let mail_error = null;
 let mail_config_ready = false;
+let password_stored = false;
 let global_config = normalize_global({});
 let smtp_config = normalize_smtp({});
 let monitors = [];
@@ -52,7 +57,8 @@ let shutdown_timer = null;
 let mail_test = new_mail_test_tracker();
 
 function persist_status() {
-	if (!write_status(daemon_started, last_reload, mail_error, mail_test, states))
+	if (!write_status(daemon_started, last_reload, mail_error,
+		password_stored, mail_test, states))
 		log.syslog('err', 'unable to write public status');
 };
 
@@ -628,7 +634,9 @@ function load_configuration() {
 
 	try {
 		next_global = normalize_global(cursor.get_all('netwatch', 'main') ?? {});
-		next_smtp = normalize_smtp(cursor.get_all('netwatch', 'smtp') ?? {});
+		next_smtp = normalize_smtp(
+			cursor.get_all('netwatch', 'smtp') ?? {},
+			migrate_smtp_password(cursor));
 
 		cursor.foreach('netwatch', 'monitor', (raw) => {
 			let id = raw['.name'];
@@ -659,6 +667,7 @@ function load_configuration() {
 
 	global_config = next_global;
 	smtp_config = next_smtp;
+	password_stored = smtp_config.password != '';
 	monitors = next_monitors;
 	monitor_by_id = next_monitor_by_id;
 	states = next_states;
@@ -788,6 +797,42 @@ function request_test_email(request) {
 	);
 };
 
+function request_set_password(request) {
+	try {
+		if (shutting_down)
+			return { ok: false, error: 'service stopping' };
+
+		let action = request.args?.action;
+		let password = request.args?.password;
+		let cursor = uci.cursor();
+
+		if (action == 'replace') {
+			if (!valid_smtp_password(password))
+				return { ok: false, error: 'password is invalid' };
+			if (!replace_smtp_password(cursor, password))
+				return { ok: false, error: 'password update failed' };
+			smtp_config = { ...smtp_config, password };
+			password_stored = true;
+		}
+		else if (action == 'clear') {
+			if (!clear_smtp_password(cursor))
+				return { ok: false, error: 'password update failed' };
+			smtp_config = { ...smtp_config, password: '' };
+			password_stored = false;
+		}
+		else {
+			return { ok: false, error: 'password action is invalid' };
+		}
+
+		configure_mail(smtp_config);
+		persist_status();
+		return { ok: true };
+	}
+	catch (error) {
+		return { ok: false, error: 'password update failed' };
+	}
+};
+
 log.openlog('netwatch', ['pid'], 'daemon');
 
 if (!uloop.init())
@@ -805,10 +850,12 @@ if (!load_configuration())
 
 let service_object = conn.publish('netwatch', service_methods({
 	status: (request) => public_status(
-		daemon_started, last_reload, mail_error, mail_test, states),
+		daemon_started, last_reload, mail_error,
+		password_stored, mail_test, states),
 	interfaces: request_interfaces,
 	check: request_check,
-	test_email: request_test_email
+	test_email: request_test_email,
+	set_password: request_set_password
 }));
 
 if (!service_object)

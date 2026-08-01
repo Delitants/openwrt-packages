@@ -15,6 +15,17 @@ const callStatus = rpc.declare({
 	object: 'netwatch', method: 'status', expect: { '': {} }
 });
 
+const callSetPassword = rpc.declare({
+	object: 'netwatch', method: 'set_password', params: [ 'action', 'password' ]
+});
+
+function updateStoredPassword(action, password) {
+	return L.resolveDefault(callSetPassword(action, password), null).then(result => {
+		if (!result || result.ok !== true)
+			throw new Error(_('SMTP password could not be updated.'));
+	});
+}
+
 function delay(milliseconds) {
 	return new Promise(resolve => window.setTimeout(resolve, milliseconds));
 }
@@ -51,13 +62,16 @@ function setTestEmailBusy(map, busy) {
 
 return view.extend({
 	load() {
-		return uci.load('netwatch');
+		return Promise.all([
+			uci.load('netwatch'),
+			L.resolveDefault(callStatus(), { password_stored: false })
+		]);
 	},
 
-	render() {
+	render(data) {
 		const m = new form.Map('netwatch', _('Netwatch email'),
 			_('Configure the SMTP server and notification recipients.'));
-		const passwordStored = !!uci.get('netwatch', 'smtp', 'password');
+		const passwordStored = data && data[1] && data[1].password_stored === true;
 		let s, o;
 
 		s = m.section(form.NamedSection, 'main', 'netwatch', _('Notifications'));
@@ -116,8 +130,13 @@ return view.extend({
 		o.rmempty = true;
 		o.cfgvalue = function() { return ''; };
 		o.write = function(sectionId, value) {
-			if (value !== '')
-				uci.set('netwatch', sectionId, 'password', value);
+			const clearOption = this.section.children.find(
+				child => child.option === '_clear_password');
+			const clearRequested = clearOption &&
+				clearOption.formvalue(sectionId) === '1';
+
+			if (value !== '' && !clearRequested)
+				return updateStoredPassword('replace', value);
 		};
 		o.remove = function() {};
 
@@ -128,7 +147,7 @@ return view.extend({
 		o.cfgvalue = function() { return '0'; };
 		o.write = function(sectionId, value) {
 			if (value === '1')
-				uci.unset('netwatch', sectionId, 'password');
+				return updateStoredPassword('clear', '');
 		};
 		o.remove = function() {};
 

@@ -91,18 +91,17 @@ For direct inspection of the two raw manifests, run:
 shasum -a 256 -c outputs/SHA256SUMS
 ```
 
-The source suite covers eleven unit groups, stable package output generation,
+The source suite covers fourteen unit groups, stable package output generation,
 static/ucode checks, and artifact inspection. The artifact verifier requires
 two `1.1.0-r1` `noarch` manifests. The runtime manifest contains the CA bundle,
 `msmtp`, ucode, and all required ucode modules; the LuCI manifest contains
-`luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 17 runtime manifest paths
+`luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 21 runtime manifest paths
 and exactly seven LuCI manifest paths must match the expected lists. The
-runtime list includes the 12 modules `alerts.uc`, `config.uc`, `diagnostics.uc`,
-`interface_probe.uc`, `interfaces.uc`, `message.uc`, `netwatchd.uc`, `ping.uc`,
-`probe.uc`, `result.uc`, `state.uc`, and `store.uc`, in addition to the config,
-init, and three APK metadata paths. `/etc/config/netwatch` is a protected
-`0600` conffile, the init script is `0755`, and no packaged file may be group-
-or world-writable. The verifier also checks credentials, excludes the
+runtime list includes 15 modules, two UCI config files, the init script, and
+three APK metadata paths. `/etc/config/netwatch` and the root-owned
+`/etc/config/netwatch-secrets` are protected `0600` conffiles, the init script
+is `0755`, and no packaged file may be group- or world-writable. The verifier
+also checks credentials, excludes the
 source-only translation POT from the LuCI APK, and validates checksums,
 source-archive exclusions, unique paths, and Git snapshot reproducibility.
 
@@ -165,9 +164,11 @@ uci set netwatch.smtp.server='smtp.example.net'
 uci set netwatch.smtp.port='587'
 uci set netwatch.smtp.tls='starttls'
 uci set netwatch.smtp.username='router@example.net'
-uci set netwatch.smtp.password='replace-with-an-app-password'
 uci set netwatch.smtp.from='router@example.net'
 uci commit netwatch
+uci set netwatch-secrets.smtp=smtp
+uci set netwatch-secrets.smtp.password='replace-with-an-app-password'
+uci commit netwatch-secrets
 /etc/init.d/netwatch restart
 ```
 
@@ -181,9 +182,11 @@ uci commit netwatch
 ```
 
 Entering the password in LuCI avoids leaving it in shell history. The Email
-page preserves an existing password when its placeholder is unchanged and
-offers an explicit control to clear it. The test-email action saves and
-applies the form before requesting a fixed test message.
+page receives only a stored/not-stored boolean, keeps an empty password input,
+preserves an existing password when left empty, and offers an explicit control
+to clear it. The password is stored in the root-owned `netwatch-secrets` UCI
+package, which is excluded from the LuCI read ACL. The test-email action saves
+and applies the form before requesting a fixed test message.
 
 Here is a ping monitor with packet-loss and average-delay limits:
 
@@ -334,14 +337,16 @@ packages:
 
 ```sh
 cp /etc/config/netwatch /root/netwatch.config.backup
+cp /etc/config/netwatch-secrets /root/netwatch-secrets.config.backup
 apk update
 apk upgrade netwatch luci-app-netwatch
 /etc/init.d/netwatch restart
 ```
 
-The runtime declares `/etc/config/netwatch` as a package conffile, so local
-configuration is protected during package replacement. Keep the explicit
-backup and review any `.apk-new` file before merging new defaults.
+The runtime declares both Netwatch UCI files as package conffiles, so local
+configuration and the root-owned SMTP credential are protected during package
+replacement. Keep the explicit backups and review any `.apk-new` file before
+merging new defaults.
 
 ## Uninstall
 
@@ -350,12 +355,13 @@ remove the UI before the runtime:
 
 ```sh
 cp /etc/config/netwatch /root/netwatch.config.backup
+cp /etc/config/netwatch-secrets /root/netwatch-secrets.config.backup
 /etc/init.d/netwatch stop
 apk del luci-app-netwatch netwatch
 ```
 
-After removal, check whether `/etc/config/netwatch` remains as a protected
-modified conffile. Delete it manually only when the saved monitoring and SMTP
+After removal, check whether either Netwatch config remains as a protected
+modified conffile. Delete them manually only when the saved monitoring and SMTP
 configuration is no longer needed.
 
 Netwatch is licensed under GPL-2.0-only; see `LICENSE`.

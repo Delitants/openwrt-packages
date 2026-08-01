@@ -11,7 +11,7 @@
 		"write": {
 			"uci": [ "netwatch" ],
 			"ubus": {
-				"netwatch": [ "check", "test_email" ]
+				"netwatch": [ "check", "test_email", "set_password" ]
 			}
 		}
 	}

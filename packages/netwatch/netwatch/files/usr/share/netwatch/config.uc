@@ -122,7 +122,7 @@ export function normalize_global(raw) {
 	};
 };
 
-export function normalize_smtp(raw) {
+export function normalize_smtp(raw, private_password) {
 	raw ??= {};
 
 	return {
@@ -134,7 +134,7 @@ export function normalize_smtp(raw) {
 			false
 		),
 		username: plain_string(raw.username, ''),
-		password: plain_string(raw.password, ''),
+		password: plain_string(private_password, ''),
 		from: plain_string(raw.from, ''),
 		from_name: plain_string(raw.from_name, ''),
 		ehlo: plain_string(raw.ehlo, '')

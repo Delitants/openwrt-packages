@@ -95,6 +95,9 @@ jq -e '
 		.name == "etc/config" and
 		any(.files[]?; .name == "netwatch" and .acl.mode == 384)) and
 	any(.paths[];
+		.name == "etc/config" and
+		any(.files[]?; .name == "netwatch-secrets" and .acl.mode == 384)) and
+	any(.paths[];
 		.name == "etc/init.d" and
 		any(.files[]?; .name == "netwatch" and .acl.mode == 493)) and
 	any(.paths[];
@@ -108,6 +111,7 @@ jq -r '
 ' "$tmp/runtime.json" | LC_ALL=C sort > "$tmp/runtime-files"
 printf '%s\n' \
 	'etc/config/netwatch' \
+	'etc/config/netwatch-secrets' \
 	'etc/init.d/netwatch' \
 	'lib/apk/packages/netwatch.conffiles' \
 	'lib/apk/packages/netwatch.conffiles_static' \
@@ -117,11 +121,14 @@ printf '%s\n' \
 	'usr/share/netwatch/diagnostics.uc' \
 	'usr/share/netwatch/interface_probe.uc' \
 	'usr/share/netwatch/interfaces.uc' \
+	'usr/share/netwatch/mail_test.uc' \
 	'usr/share/netwatch/message.uc' \
 	'usr/share/netwatch/netwatchd.uc' \
 	'usr/share/netwatch/ping.uc' \
 	'usr/share/netwatch/probe.uc' \
 	'usr/share/netwatch/result.uc' \
+	'usr/share/netwatch/rpc.uc' \
+	'usr/share/netwatch/secrets.uc' \
 	'usr/share/netwatch/state.uc' \
 	'usr/share/netwatch/store.uc' > "$tmp/runtime-files.expected"
 diff -u "$tmp/runtime-files.expected" "$tmp/runtime-files"
@@ -141,6 +148,8 @@ printf '%s\n' \
 diff -u "$tmp/luci-files.expected" "$tmp/luci-files"
 
 grep -Fxq '/etc/config/netwatch' \
+	"$tmp/extracted/runtime/lib/apk/packages/netwatch.conffiles"
+grep -Fxq '/etc/config/netwatch-secrets' \
 	"$tmp/extracted/runtime/lib/apk/packages/netwatch.conffiles"
 
 grep -Fxq '/etc/config/scheduled-backup' \

@@ -43,6 +43,10 @@ deep_equal(ordered, reversed, 'deep equality ignores object key order');
 let smtp = normalize_smtp({ port: '465', tls: 'tls' });
 equal(smtp.port, 465, 'SMTP port normalized');
 equal(smtp.tls, 'tls', 'SMTP TLS normalized');
+equal(normalize_smtp({ password: 'legacy-public-value' }).password, '',
+	'public SMTP payload cannot supply the stored password');
+equal(normalize_smtp({}, 'private-password-value').password, 'private-password-value',
+	'explicit private password is normalized');
 equal(normalize_smtp({}).tls_insecure, false,
 	'SMTP certificate bypass defaults off');
 equal(normalize_smtp({ tls_insecure: '1' }).tls_insecure, true,

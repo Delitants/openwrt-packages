@@ -25,11 +25,13 @@ endef
 
 define Package/netwatch/conffiles
 /etc/config/netwatch
+/etc/config/netwatch-secrets
 endef
 
 define Package/netwatch/install
 	$(INSTALL_DIR) $(1)/etc/config
 	$(INSTALL_CONF) ./files/etc/config/netwatch $(1)/etc/config/netwatch
+	$(INSTALL_CONF) ./files/etc/config/netwatch-secrets $(1)/etc/config/netwatch-secrets
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/etc/init.d/netwatch $(1)/etc/init.d/netwatch
 	$(INSTALL_DIR) $(1)/usr/share/netwatch

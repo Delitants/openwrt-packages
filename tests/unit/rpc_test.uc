@@ -6,7 +6,8 @@ let handlers = {
 	status: (request) => push(calls, [ 'status', request.args ]),
 	interfaces: (request) => push(calls, [ 'interfaces', request.args ]),
 	check: (request) => push(calls, [ 'check', request.args ]),
-	test_email: (request) => push(calls, [ 'test_email', request.args ])
+	test_email: (request) => push(calls, [ 'test_email', request.args ]),
+	set_password: (request) => push(calls, [ 'set_password', request.args ])
 };
 let methods = service_methods(handlers);
 
@@ -19,12 +20,16 @@ deep_equal(methods.check.args, { id: '', ubus_rpc_session: '' },
 deep_equal(methods.test_email.args,
 	{ recipient: '', ubus_rpc_session: '' },
 	'test email accepts recipient and LuCI session argument');
+deep_equal(methods.set_password.args,
+	{ action: '', password: '', ubus_rpc_session: '' },
+	'write-only password method accepts bounded arguments and LuCI session');
 
-for (let name in [ 'status', 'interfaces', 'check', 'test_email' ])
+for (let name in [ 'status', 'interfaces', 'check', 'test_email', 'set_password' ])
 	methods[name].call({ args: { ubus_rpc_session: 'session-only' } });
 deep_equal(calls, [
 	[ 'status', { ubus_rpc_session: 'session-only' } ],
 	[ 'interfaces', { ubus_rpc_session: 'session-only' } ],
 	[ 'check', { ubus_rpc_session: 'session-only' } ],
-	[ 'test_email', { ubus_rpc_session: 'session-only' } ]
+	[ 'test_email', { ubus_rpc_session: 'session-only' } ],
+	[ 'set_password', { ubus_rpc_session: 'session-only' } ]
 ], 'all published handlers remain callable');
