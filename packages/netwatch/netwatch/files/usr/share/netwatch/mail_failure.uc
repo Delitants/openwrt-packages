@@ -29,7 +29,7 @@ function safe_exit_code(value) {
 };
 
 function safe_smtp_status(value) {
-	return type(value) == 'int' && value >= 100 && value <= 599 ? value : null;
+	return type(value) == 'int' && value >= 200 && value <= 599 ? value : null;
 };
 
 function exit_name(exit_code) {
@@ -60,12 +60,16 @@ function redact_line(value) {
 	value = replace(value, /<[^>]*>/g, ' ');
 	value = replace(value, /[<>]/g, ' ');
 	value = replace(value,
-		/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+[.][A-Z]{2,}\b/gi,
+		/[A-Z0-9.!#$%&'*+\/?^_`{|}~-]+@(\[[A-Z0-9:.%-]+\]|[A-Z0-9][A-Z0-9.-]*)/gi,
 		'[REDACTED]');
-	value = replace(value,
-		/(\b(user(name)?|account|login|password|pass(word)?|token|secret|credential|authorization|proxy-authorization|api[_-]?key|access[_-]?key|client[_-]?secret|private[_-]?key)\b[ \t]*[:=][ \t]*)("[^"]*"|'[^']*'|[^ \t,;]+)/gi,
-		'$1[REDACTED]');
 	return value;
+};
+
+function credential_line(value) {
+	return match(value,
+		/\b(user(name)?|account|login|password|pass(word)?|passwordeval|token|secret|credential|auth|authorization|proxy-authorization|api[_-]?key|access[_-]?key|client[_-]?secret|private[_-]?key)\b[ \t]*[:=]/i) ||
+		match(value,
+		/\b(user(name)?|login|password|pass(word)?|passwordeval|token|secret|credential|auth|authorization|proxy-authorization|api[_-]?key|access[_-]?key|client[_-]?secret|private[_-]?key)\b[ \t]+/i);
 };
 
 function sanitize_text(value, maximum, strip_prefix) {
@@ -73,11 +77,28 @@ function sanitize_text(value, maximum, strip_prefix) {
 
 	value = replace(value, /\r\n?/g, '\n');
 	let output = [];
+	let private_key = false;
+	let credentials_redacted = false;
 	for (let index, line in split(value, '\n')) {
+		if (!private_key && match(line, /-----BEGIN [^-]*PRIVATE KEY-----/i)) {
+			push(output, '[REDACTED PRIVATE KEY]');
+			private_key = !match(line, /-----END [^-]*PRIVATE KEY-----/i);
+			continue;
+		}
+		if (private_key) {
+			if (match(line, /-----END [^-]*PRIVATE KEY-----/i)) private_key = false;
+			continue;
+		}
 		if (strip_prefix && index == 0)
 			line = replace(line, /^[ \t]*msmtp(\[[0-9]+\])?:[ \t]*/i, '');
-		push(output, redact_line(line));
+		line = redact_line(line);
+		if (credential_line(line)) {
+			credentials_redacted = true;
+			continue;
+		}
+		push(output, line);
 	}
+	if (credentials_redacted) push(output, '[REDACTED CREDENTIALS]');
 
 	value = trim(replace(join(' ', output), /[[:space:]]+/g, ' '));
 	return truncate_text(value, maximum);
@@ -121,10 +142,12 @@ export function classify_mail_failure(exit_code, stderr, timed_out, smtp_status)
 	let lower = lc(detail);
 	let stage;
 
-	if (exit_code == 78 || match(lower,
+	if (smtp_status != null)
+		stage = smtp_status in [ 530, 534, 535 ] ? 'auth' : 'smtp';
+	else if (exit_code == 78 || match(lower,
 		/configuration file|configuration error|account .* not found|invalid configuration/))
 		stage = 'config';
-	else if (exit_code == 77 || smtp_status in [ 530, 534, 535 ] ||
+	else if (exit_code == 77 ||
 		match(lower, /authentication|authorization failed|credentials rejected/))
 		stage = 'auth';
 	else if (match(lower,
@@ -136,7 +159,7 @@ export function classify_mail_failure(exit_code, stderr, timed_out, smtp_status)
 	else if (exit_code == 74 || match(lower,
 		/network|connect|connection|socket|read error|write error|timed? out|timeout|broken pipe|unreachable/))
 		stage = 'network';
-	else if (smtp_status != null || match(lower,
+	else if (match(lower,
 		/server message|smtp status|recipient rejected|sender rejected|message rejected/))
 		stage = 'smtp';
 	else
