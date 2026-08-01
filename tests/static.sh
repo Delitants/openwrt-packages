@@ -15,8 +15,9 @@ require_file packages/netwatch/netwatch/Makefile
 require_file packages/netwatch/netwatch/files/etc/config/netwatch
 require_file packages/netwatch/netwatch/files/etc/config/netwatch-secrets
 require_file packages/netwatch/netwatch/files/etc/init.d/netwatch
+require_file packages/netwatch/netwatch/files/usr/libexec/netwatch-upgrade
 for module in \
-	alerts config diagnostics interface_probe interfaces mail_test message \
+	alerts config diagnostics interface_probe interfaces mail_test message migrate \
 	netwatchd ping probe result rpc secrets state store
 do
 	require_file "packages/netwatch/netwatch/files/usr/share/netwatch/$module.uc"
@@ -44,6 +45,7 @@ require_file scripts/verify-artifacts.sh
 require_file tests/in-sdk-behavior_test.sh
 require_file tests/in-sdk-source_test.sh
 require_file tests/package-output_test.sh
+require_file tests/upgrade-activation_test.sh
 
 for selector in CONFIG_ALL CONFIG_ALL_KMODS CONFIG_ALL_NONSHARED; do
 	if ! grep -Fq -- "# $selector is not set" \
@@ -63,6 +65,7 @@ if [ "$fail" -eq 0 ]; then
 	"$root/tests/in-sdk-behavior_test.sh" || fail=1
 	"$root/tests/in-sdk-source_test.sh" || fail=1
 	"$root/tests/package-output_test.sh" || fail=1
+	"$root/tests/upgrade-activation_test.sh" || fail=1
 fi
 
 if ! grep -Fq '# call BuildPackage - OpenWrt buildroot signature' \
@@ -126,7 +129,7 @@ do
 done
 
 for module in \
-	alerts config diagnostics interface_probe interfaces mail_test message \
+	alerts config diagnostics interface_probe interfaces mail_test message migrate \
 	netwatchd ping probe result rpc secrets state store
 do
 	if ! grep -Fq -- "usr/share/netwatch/$module.uc" \
@@ -146,8 +149,8 @@ luci_manifest_count=$(awk '
 	luci && /^[[:space:]]*'\''[^'\'']+'\''/ { count++ }
 	luci && /luci-files\.expected/ { print count; exit }
 ' "$root/scripts/verify-artifacts.sh")
-if [ "$runtime_manifest_count" != 21 ] || [ "$luci_manifest_count" != 7 ]; then
-	echo "artifact manifest counts are not exactly 21 runtime and 7 LuCI paths: $runtime_manifest_count/$luci_manifest_count" >&2
+if [ "$runtime_manifest_count" != 23 ] || [ "$luci_manifest_count" != 7 ]; then
+	echo "artifact manifest counts are not exactly 23 runtime and 7 LuCI paths: $runtime_manifest_count/$luci_manifest_count" >&2
 	fail=1
 fi
 
@@ -172,7 +175,7 @@ if [ "$fail" -eq 0 ]; then
 		'outputs/netwatch_1.1.0-r2_all.apk' \
 		'outputs/luci-app-netwatch_1.1.0-r2_all.apk' \
 		'outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
-		'21 runtime manifest paths' \
+		'23 runtime manifest paths' \
 		'exactly seven LuCI manifest paths' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/keys/netwatch-local.pem' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/feed/x86_64/packages.adb' \

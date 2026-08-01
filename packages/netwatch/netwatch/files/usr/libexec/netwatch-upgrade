@@ -1,0 +1,34 @@
+#!/bin/sh
+set -eu
+
+[ -z "${IPKG_INSTROOT:-}" ] || exit 0
+
+ucode_bin=${1:-/usr/bin/ucode}
+init_script=${2:-/etc/init.d/netwatch}
+ubus_bin=${3:-/bin/ubus}
+sleep_bin=${4:-/bin/sleep}
+
+"$ucode_bin" -L /usr/share/netwatch /usr/share/netwatch/migrate.uc
+
+if ! "$init_script" enabled; then
+	exit 0
+fi
+
+"$init_script" restart
+
+attempt=1
+while [ "$attempt" -le 30 ]; do
+	methods=$("$ubus_bin" -t 1 -v list netwatch 2>/dev/null || true)
+	case "$methods" in
+		*'"status"'*'"interfaces"'*'"check"'*'"test_email"'*'"set_password"'*)
+			exit 0
+			;;
+	esac
+
+	[ "$attempt" -lt 30 ] || break
+	"$sleep_bin" 1
+	attempt=$((attempt + 1))
+done
+
+echo 'error: Netwatch did not publish the r2 ubus interface after restart' >&2
+exit 1

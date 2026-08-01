@@ -3,7 +3,18 @@
 USE_PROCD=1
 START=95
 
+netwatch_service_enabled() {
+	/etc/init.d/netwatch enabled
+}
+
 start_service() {
+	# default_postinst calls "start" during an APK upgrade even when the
+	# administrator deliberately disabled this service. The package upgrade
+	# hook performs credential migration and restarts only enabled instances.
+	if [ "${PKG_UPGRADE:-}" = 1 ] && ! netwatch_service_enabled; then
+		return 0
+	fi
+
 	mkdir -p /var/run/netwatch
 	chmod 0700 /var/run/netwatch
 

@@ -34,8 +34,17 @@ define Package/netwatch/install
 	$(INSTALL_CONF) ./files/etc/config/netwatch-secrets $(1)/etc/config/netwatch-secrets
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/etc/init.d/netwatch $(1)/etc/init.d/netwatch
+	$(INSTALL_DIR) $(1)/usr/libexec
+	$(INSTALL_BIN) ./files/usr/libexec/netwatch-upgrade $(1)/usr/libexec/netwatch-upgrade
 	$(INSTALL_DIR) $(1)/usr/share/netwatch
 	$(INSTALL_DATA) ./files/usr/share/netwatch/*.uc $(1)/usr/share/netwatch/
+endef
+
+define Package/netwatch/postinst
+#!/bin/sh
+if [ -z "$${IPKG_INSTROOT:-}" ] && [ "$${PKG_UPGRADE:-0}" = 1 ]; then
+	/usr/libexec/netwatch-upgrade
+fi
 endef
 
 $(eval $(call BuildPackage,netwatch))

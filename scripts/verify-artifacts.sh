@@ -101,6 +101,9 @@ jq -e '
 		.name == "etc/init.d" and
 		any(.files[]?; .name == "netwatch" and .acl.mode == 493)) and
 	any(.paths[];
+		.name == "usr/libexec" and
+		any(.files[]?; .name == "netwatch-upgrade" and .acl.mode == 493)) and
+	any(.paths[];
 		.name == "lib/apk/packages" and
 		any(.files[]?; .name == "netwatch.conffiles"))
 ' "$tmp/runtime.json" >/dev/null
@@ -116,6 +119,7 @@ printf '%s\n' \
 	'lib/apk/packages/netwatch.conffiles' \
 	'lib/apk/packages/netwatch.conffiles_static' \
 	'lib/apk/packages/netwatch.list' \
+	'usr/libexec/netwatch-upgrade' \
 	'usr/share/netwatch/alerts.uc' \
 	'usr/share/netwatch/config.uc' \
 	'usr/share/netwatch/diagnostics.uc' \
@@ -123,6 +127,7 @@ printf '%s\n' \
 	'usr/share/netwatch/interfaces.uc' \
 	'usr/share/netwatch/mail_test.uc' \
 	'usr/share/netwatch/message.uc' \
+	'usr/share/netwatch/migrate.uc' \
 	'usr/share/netwatch/netwatchd.uc' \
 	'usr/share/netwatch/ping.uc' \
 	'usr/share/netwatch/probe.uc' \
@@ -132,6 +137,19 @@ printf '%s\n' \
 	'usr/share/netwatch/state.uc' \
 	'usr/share/netwatch/store.uc' > "$tmp/runtime-files.expected"
 diff -u "$tmp/runtime-files.expected" "$tmp/runtime-files"
+
+post_upgrade=$(jq -r '.scripts["post-upgrade"]' "$tmp/runtime.json")
+case "$post_upgrade" in
+	*'export PKG_UPGRADE=1'*'default_postinst'*'/usr/libexec/netwatch-upgrade'*) ;;
+	*)
+		echo 'error: runtime post-upgrade does not activate Netwatch after default_postinst' >&2
+		exit 1
+		;;
+esac
+
+NETWATCH_ACTIVATION_SCRIPT="$tmp/extracted/runtime/usr/libexec/netwatch-upgrade" \
+	NETWATCH_INIT_SCRIPT="$tmp/extracted/runtime/etc/init.d/netwatch" \
+	"$root/tests/upgrade-activation_test.sh"
 
 jq -r '
 	.paths[] | .name as $dir | (.files // [])[] |
@@ -220,4 +238,4 @@ do
 	grep -Fxq "$required" "$tmp/source-files"
 done
 
-echo 'artifact verification passed: manifests, dependencies, contents, LuCI post-install, modes, conffiles, credential scan, source archive, and checksums'
+echo 'artifact verification passed: manifests, dependencies, upgrade activation, contents, LuCI post-install, modes, conffiles, credential scan, source archive, and checksums'

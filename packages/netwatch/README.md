@@ -77,6 +77,7 @@ verified with its apk-tools 3.0.5. The exact replayable verification is:
   tests/unit/mail_test_test.uc \
   tests/unit/rpc_test.uc \
   tests/unit/secrets_test.uc
+./tests/upgrade-activation_test.sh
 ./tests/package-output_test.sh
 ./tests/static.sh
 ./scripts/verify-artifacts.sh
@@ -98,10 +99,10 @@ The source suite covers fourteen unit groups, stable package output generation,
 static/ucode checks, and artifact inspection. The artifact verifier requires
 two `1.1.0-r2` `noarch` manifests. The runtime manifest contains the CA bundle,
 `msmtp`, ucode, and all required ucode modules; the LuCI manifest contains
-`luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 21 runtime manifest paths
+`luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 23 runtime manifest paths
 and exactly seven LuCI manifest paths must match the expected lists. The
-runtime list includes 15 modules, two UCI config files, the init script, and
-three APK metadata paths. `/etc/config/netwatch` and the root-owned
+runtime list includes 16 modules, two UCI config files, the init script, the
+upgrade activator, and three APK metadata paths. `/etc/config/netwatch` and the root-owned
 `/etc/config/netwatch-secrets` are protected `0600` conffiles, the init script
 is `0755`, and no packaged file may be group- or world-writable. The verifier
 also checks credentials, excludes the
@@ -358,13 +359,16 @@ cp /etc/config/netwatch /root/netwatch.config.backup
 cp /etc/config/netwatch-secrets /root/netwatch-secrets.config.backup
 apk update
 apk upgrade netwatch luci-app-netwatch
-/etc/init.d/netwatch restart
 ```
 
 The runtime declares both Netwatch UCI files as package conffiles, so local
 configuration and the root-owned SMTP credential are protected during package
-replacement. Keep the explicit backups and review any `.apk-new` file before
-merging new defaults.
+replacement. During an r1-to-r2 live upgrade, the package migrates any legacy
+public SMTP password before forcing a restart of an enabled daemon, then waits
+for the complete r2 ubus interface. A deliberately disabled service remains
+disabled and stopped; its password is still migrated by the one-shot upgrade
+path. Offline image-root installs do not perform these live actions. Keep the
+explicit backups and review any `.apk-new` file before merging new defaults.
 
 ## Uninstall
 
