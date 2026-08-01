@@ -1,4 +1,4 @@
-import { deep_equal, equal } from 'test';
+import { deep_equal } from 'test';
 import { service_methods } from 'rpc';
 
 let calls = [];
@@ -22,4 +22,9 @@ deep_equal(methods.test_email.args,
 
 for (let name in [ 'status', 'interfaces', 'check', 'test_email' ])
 	methods[name].call({ args: { ubus_rpc_session: 'session-only' } });
-equal(length(calls), 4, 'all published handlers remain callable');
+deep_equal(calls, [
+	[ 'status', { ubus_rpc_session: 'session-only' } ],
+	[ 'interfaces', { ubus_rpc_session: 'session-only' } ],
+	[ 'check', { ubus_rpc_session: 'session-only' } ],
+	[ 'test_email', { ubus_rpc_session: 'session-only' } ]
+], 'all published handlers remain callable');
