@@ -11,6 +11,7 @@ import { render_diagnostic_report } from 'diagnostics';
 import { collect_interface_inventory } from 'interfaces';
 import { render_msmtp, render_message, split_recipients } from 'message';
 import { start_probe } from 'probe';
+import { service_methods } from 'rpc';
 import { public_status, write_status } from 'store';
 
 const RUNTIME_DIR = '/var/run/netwatch';
@@ -795,25 +796,13 @@ if (!conn)
 if (!load_configuration())
 	die('unable to load configuration\n');
 
-let service_object = conn.publish('netwatch', {
-	status: {
-		args: {},
-		call: (request) => public_status(
-			daemon_started, last_reload, mail_error, states)
-	},
-	interfaces: {
-		args: {},
-		call: request_interfaces
-	},
-	check: {
-		args: { id: '' },
-		call: request_check
-	},
-	test_email: {
-		args: { recipient: '' },
-		call: request_test_email
-	}
-});
+let service_object = conn.publish('netwatch', service_methods({
+	status: (request) => public_status(
+		daemon_started, last_reload, mail_error, states),
+	interfaces: request_interfaces,
+	check: request_check,
+	test_email: request_test_email
+}));
 
 if (!service_object)
 	die('unable to publish ubus service\n');
