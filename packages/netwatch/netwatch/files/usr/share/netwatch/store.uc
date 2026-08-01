@@ -1,15 +1,19 @@
 import * as fs from 'fs';
+import { public_mail_test } from 'mail_test';
 import { compact_result } from 'result';
 
 const STATUS_TEMP = '/var/run/netwatch/status.json.tmp';
 const STATUS_FILE = '/var/run/netwatch/status.json';
 
-export function public_status(daemon_started, last_reload, mail_error, states) {
+export function public_status(
+	daemon_started, last_reload, mail_error, mail_test, states
+) {
 	return {
 		version: 1,
 		daemon_started,
 		last_reload,
 		mail_error,
+		mail_test: public_mail_test(mail_test),
 		monitors: map(states, (s) => ({
 			id: s.id,
 			status: s.status,
@@ -24,9 +28,11 @@ export function public_status(daemon_started, last_reload, mail_error, states) {
 	};
 };
 
-export function write_status(daemon_started, last_reload, mail_error, states) {
+export function write_status(
+	daemon_started, last_reload, mail_error, mail_test, states
+) {
 	let output = `${sprintf('%J',
-		public_status(daemon_started, last_reload, mail_error, states))}\n`;
+		public_status(daemon_started, last_reload, mail_error, mail_test, states))}\n`;
 	let file = fs.open(STATUS_TEMP, 'w', 0o600);
 
 	if (!file)

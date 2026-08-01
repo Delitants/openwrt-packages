@@ -10,6 +10,9 @@ import { start_diagnostics } from 'diagnostics';
 import { render_diagnostic_report } from 'diagnostics';
 import { collect_interface_inventory } from 'interfaces';
 import { render_msmtp, render_message, split_recipients } from 'message';
+import {
+	new_mail_test_tracker, begin_mail_test, finish_mail_test, start_mail_test
+} from 'mail_test';
 import { start_probe } from 'probe';
 import { service_methods } from 'rpc';
 import { public_status, write_status } from 'store';
@@ -46,10 +49,18 @@ let scheduler = null;
 let shutting_down = false;
 let active_deliveries = [];
 let shutdown_timer = null;
+let mail_test = new_mail_test_tracker();
 
 function persist_status() {
-	if (!write_status(daemon_started, last_reload, mail_error, states))
+	if (!write_status(daemon_started, last_reload, mail_error, mail_test, states))
 		log.syslog('err', 'unable to write public status');
+};
+
+function mail_work_active() {
+	if (length(active_deliveries)) return true;
+	for (let state in states)
+		if (state?.mail_busy) return true;
+	return false;
 };
 
 function ensure_runtime_directory() {
@@ -519,7 +530,7 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 };
 
 function start_alert(monitor, state, kind, now) {
-	if (shutting_down)
+	if (shutting_down || mail_work_active())
 		return false;
 
 	if (!mail_config_ready) {
@@ -726,10 +737,17 @@ function test_message(recipients, now) {
 
 function request_test_email(request) {
 	let message;
+	let started_at;
 
 	try {
 		if (shutting_down)
 			return { ok: false, error: 'service stopping' };
+
+		if (mail_work_active())
+			return { ok: false, error: 'mail delivery already running' };
+
+		if (!load_configuration())
+			return { ok: false, error: 'configuration reload failed' };
 
 		if (!mail_config_ready)
 			return { ok: false, error: 'mail configuration invalid' };
@@ -751,34 +769,23 @@ function request_test_email(request) {
 			return { ok: false, error: 'recipient is invalid' };
 		}
 
-		message = test_message(recipients, time());
+		started_at = time();
+		message = test_message(recipients, started_at);
 	}
 	catch (error) {
 		return { ok: false, error: 'test email failed' };
 	}
 
-	try {
-		request.defer();
-	}
-	catch (error) {
-		return { ok: false, error: 'test email failed' };
-	}
-
-	let delivery_started = start_delivery(message, (delivered) => {
-		mail_error = delivered ? null : 'mail delivery failed';
-		request.reply(delivered
-			? { ok: true }
-			: { ok: false, error: 'mail delivery failed' });
-		persist_status();
-	});
-
-	if (!delivery_started) {
-		mail_error = 'mail delivery failed';
-		request.reply({ ok: false, error: 'mail delivery failed' });
-		persist_status();
-	}
-
-	return;
+	return start_mail_test(
+		mail_test,
+		started_at,
+		(callback) => start_delivery(message, callback),
+		time,
+		(current) => {
+			mail_error = current.state == 'failed' ? current.error : null;
+			persist_status();
+		}
+	);
 };
 
 log.openlog('netwatch', ['pid'], 'daemon');
@@ -798,7 +805,7 @@ if (!load_configuration())
 
 let service_object = conn.publish('netwatch', service_methods({
 	status: (request) => public_status(
-		daemon_started, last_reload, mail_error, states),
+		daemon_started, last_reload, mail_error, mail_test, states),
 	interfaces: request_interfaces,
 	check: request_check,
 	test_email: request_test_email

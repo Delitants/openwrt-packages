@@ -1,7 +1,12 @@
 import { deep_equal, equal, truthy } from 'test';
+import { begin_mail_test, new_mail_test_tracker } from 'mail_test';
 import { public_status } from 'store';
 
-let status = public_status(10, 20, null, [ {
+let mail_test = new_mail_test_tracker();
+begin_mail_test(mail_test, 15);
+mail_test.secret = 'public-mail-test-secret';
+
+let status = public_status(10, 20, null, mail_test, [ {
 	id: 'wifi', status: 'failed', last_check: 30, last_transition: 25,
 	last_result: { ok: false, reason: 'wireless_ap_down', evidence: { present: false } },
 	consecutive_failures: 3, incident_started: 25, failure_emails: 1,
@@ -10,8 +15,13 @@ let status = public_status(10, 20, null, [ {
 equal(status.monitors[0].last_transition, 25, 'last transition published');
 equal(match(sprintf('%J', status), /must not persist/), null, 'diagnostic report omitted');
 truthy(type(status.monitors[0].last_result.evidence) == 'object', 'compact evidence retained');
+deep_equal(status.mail_test, {
+	id: 1, state: 'sending', started: 15, completed: null, error: null
+}, 'public status includes only bounded test email state');
+equal(match(sprintf('%J', status), /public-mail-test-secret/), null,
+	'mail test tracker secret omitted');
 
-let tainted_status = public_status(10, 20, null, [ {
+let tainted_status = public_status(10, 20, null, mail_test, [ {
 	id: 'wifi', status: 'failed', last_check: 30, last_transition: 25,
 	last_result: {
 		ok: false, reason: 'wireless_ap_down', summary: 'wireless AP is not running',
