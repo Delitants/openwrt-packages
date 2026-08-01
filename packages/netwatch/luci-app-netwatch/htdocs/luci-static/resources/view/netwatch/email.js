@@ -5,12 +5,32 @@
 'require uci';
 'require ui';
 
-const PASSWORD_PLACEHOLDER = '********';
 let testEmailInFlight = false;
 
 const callTestEmail = rpc.declare({
 	object: 'netwatch', method: 'test_email', params: [ 'recipient' ]
 });
+
+const callStatus = rpc.declare({
+	object: 'netwatch', method: 'status', expect: { '': {} }
+});
+
+function delay(milliseconds) {
+	return new Promise(resolve => window.setTimeout(resolve, milliseconds));
+}
+
+function waitForMailTest(id, deadline) {
+	return L.resolveDefault(callStatus(), null).then(status => {
+		const test = status && status.mail_test;
+
+		if (test && test.id === id && (test.state === 'sent' || test.state === 'failed'))
+			return test.state;
+		if (Date.now() >= deadline)
+			return 'timeout';
+
+		return delay(1000).then(() => waitForMailTest(id, deadline));
+	});
+}
 
 function setTestEmailBusy(map, busy) {
 	const field = map.findElement('data-name', '_test_email');
@@ -37,6 +57,7 @@ return view.extend({
 	render() {
 		const m = new form.Map('netwatch', _('Netwatch email'),
 			_('Configure the SMTP server and notification recipients.'));
+		const passwordStored = !!uci.get('netwatch', 'smtp', 'password');
 		let s, o;
 
 		s = m.section(form.NamedSection, 'main', 'netwatch', _('Notifications'));
@@ -77,17 +98,25 @@ return view.extend({
 		o.default = 'starttls';
 		o.rmempty = false;
 
+		o = s.option(form.Flag, 'tls_insecure',
+			_('Disable TLS certificate verification (insecure)'),
+			_('This permits man-in-the-middle attacks. Use only when the SMTP certificate cannot be validated through the router trust store.'));
+		o.default = o.disabled;
+		o.rmempty = true;
+		o.depends('tls', 'starttls');
+		o.depends('tls', 'tls');
+
 		o = s.option(form.Value, 'username', _('Username'));
 
-		o = s.option(form.Value, 'password', _('Password'),
-			_('Leave the placeholder unchanged to keep the stored password.'));
+		o = s.option(form.Value, 'password', _('Password'), passwordStored
+			? _('A password is stored. Leave this field empty to keep it, or enter a replacement.')
+			: _('Enter the SMTP password.'));
 		o.password = true;
+		o.placeholder = passwordStored ? _('Stored password unchanged') : '';
 		o.rmempty = true;
-		o.cfgvalue = function(sectionId) {
-			return uci.get('netwatch', sectionId, 'password') ? PASSWORD_PLACEHOLDER : '';
-		};
+		o.cfgvalue = function() { return ''; };
 		o.write = function(sectionId, value) {
-			if (value !== '' && value !== PASSWORD_PLACEHOLDER)
+			if (value !== '')
 				uci.set('netwatch', sectionId, 'password', value);
 		};
 		o.remove = function() {};
@@ -140,10 +169,18 @@ return view.extend({
 				})
 				.then(() => callTestEmail(recipient))
 				.then(result => {
-					if (!result || result.ok !== true)
+					if (!result || result.ok !== true || !Number.isInteger(result.id))
 						throw new Error('test failed');
 
-					ui.addNotification(null, E('p', _('Test email sent successfully.')), 'info');
+					return waitForMailTest(result.id, Date.now() + 70000);
+				})
+				.then(state => {
+					if (state === 'sent')
+						ui.addNotification(null, E('p', _('Test email sent successfully.')), 'info');
+					else if (state === 'failed')
+						ui.addNotification(null, E('p', _('Test email could not be sent. Check the configuration and system log.')), 'error');
+					else
+						ui.addNotification(null, E('p', _('Timed out waiting for the test email result. Check the system log.')), 'error');
 				})
 				.catch(() => {
 					ui.addNotification(null, E('p', _('Test email could not be sent. Check the configuration and system log.')), 'error');
