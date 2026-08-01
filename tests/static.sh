@@ -17,7 +17,7 @@ require_file packages/netwatch/netwatch/files/etc/config/netwatch-secrets
 require_file packages/netwatch/netwatch/files/etc/init.d/netwatch
 require_file packages/netwatch/netwatch/files/usr/libexec/netwatch-upgrade
 for module in \
-	alerts config diagnostics interface_probe interfaces mail_test message migrate \
+	alerts config diagnostics interface_probe interfaces mail_failure mail_test message migrate \
 	netwatchd ping probe result rpc secrets state store
 do
 	require_file "packages/netwatch/netwatch/files/usr/share/netwatch/$module.uc"
@@ -47,6 +47,7 @@ require_file tests/in-sdk-source_test.sh
 require_file tests/package-output_test.sh
 require_file tests/upgrade-activation_test.sh
 require_file tests/luci-monitors_test.js
+require_file tests/unit/mail_failure_test.uc
 require_file tests/unit/message_string_test.uc
 
 for selector in CONFIG_ALL CONFIG_ALL_KMODS CONFIG_ALL_NONSHARED; do
