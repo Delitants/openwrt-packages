@@ -21,7 +21,15 @@ export function finish_mail_test(tracker, id, delivered, now) {
 };
 
 export function public_mail_test(tracker) {
-	return tracker?.current ? { ...tracker.current } : null;
+	let current = tracker?.current;
+
+	return current ? {
+		id: current.id,
+		state: current.state,
+		started: current.started,
+		completed: current.completed,
+		error: current.error
+	} : null;
 };
 
 export function start_mail_test(

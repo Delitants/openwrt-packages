@@ -4,7 +4,7 @@ import { public_status } from 'store';
 
 let mail_test = new_mail_test_tracker();
 begin_mail_test(mail_test, 15);
-mail_test.secret = 'public-mail-test-secret';
+mail_test.current.password = 'public-mail-test-secret';
 
 let status = public_status(10, 20, null, mail_test, [ {
 	id: 'wifi', status: 'failed', last_check: 30, last_transition: 25,

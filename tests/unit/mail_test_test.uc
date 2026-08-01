@@ -11,6 +11,10 @@ let first = begin_mail_test(tracker, 100);
 deep_equal(first, {
 	id: 1, state: 'sending', started: 100, completed: null, error: null
 }, 'test begins with bounded sending state');
+tracker.current.password = 'injected-secret';
+deep_equal(public_mail_test(tracker), {
+	id: 1, state: 'sending', started: 100, completed: null, error: null
+}, 'public test projects only bounded lifecycle fields');
 equal(finish_mail_test(tracker, 99, true, 101), false,
 	'stale completion cannot mutate current test');
 truthy(finish_mail_test(tracker, 1, true, 102),
