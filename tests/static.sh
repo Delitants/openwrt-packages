@@ -473,7 +473,6 @@ NODE
 		'check:' \
 		'test_email:' \
 		"uloop.signal('HUP'" \
-		'request.defer()' \
 		'--timeout=60' \
 		'const MSMTP_PROCESS_TIMEOUT_MS = 65000;' \
 		"uloop.process('/bin/sh'" \
