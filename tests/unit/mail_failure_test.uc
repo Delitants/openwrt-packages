@@ -168,6 +168,32 @@ equal(whitespace_authorization.detail,
 	'server refused request [REDACTED CREDENTIALS]',
 	'whitespace Authorization bearer value remains fully redacted');
 
+let negotiate_authorization = classify_mail_failure(1,
+	'msmtp: Proxy-Authorization Negotiate opaque-ticket-value\n' +
+	'server refused request', false, null);
+
+// Production bug caught: a scheme allowlist exposes a Negotiate ticket.
+equal(match(negotiate_authorization.detail, /opaque-ticket-value/), null,
+	'whitespace Proxy-Authorization Negotiate value fully redacted');
+
+// Production bug caught: credential redaction also drops a safe sibling detail line.
+truthy(match(negotiate_authorization.detail, /server refused request/),
+	'Negotiate redaction retains safe sibling detail');
+
+let aws_authorization = classify_mail_failure(1,
+	'msmtp: Authorization AWS4-HMAC-SHA256 Credential=aws-access-secret,' +
+	'SignedHeaders=host;x-amz-date,Signature=aws-signature-secret\n' +
+	'server refused request', false, null);
+
+// Production bug caught: an unknown Authorization scheme exposes AWS signing data.
+equal(match(aws_authorization.detail,
+	/aws-access-secret|aws-signature-secret/), null,
+	'whitespace AWS Authorization value fully redacted');
+
+// Production bug caught: AWS credential redaction drops a safe sibling detail line.
+truthy(match(aws_authorization.detail, /server refused request/),
+	'AWS Authorization redaction retains safe sibling detail');
+
 let private_key = classify_mail_failure(75,
 	'msmtp: TLS failed\n-----BEGIN PRIVATE KEY-----\n' +
 	'private-key-material\n-----END PRIVATE KEY-----\nserver closed connection',

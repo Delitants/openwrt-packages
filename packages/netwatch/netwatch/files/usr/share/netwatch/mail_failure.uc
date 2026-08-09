@@ -66,12 +66,17 @@ function redact_line(value) {
 };
 
 function credential_line(value) {
-	return match(value,
+	if (match(value,
 		/\b(user(name)?|account|login|password|pass(word)?|passwordeval|token|secret|credential|auth|authorization|proxy-authorization|api[_-]?key|access[_-]?key|client[_-]?secret|private[_-]?key)\b[ \t]*[:=]/i) ||
 		match(value,
-		/\b(user(name)?|login|password|pass(word)?|passwordeval|token|secret|credential|auth|api[_-]?key|access[_-]?key|client[_-]?secret|private[_-]?key)\b[ \t]+/i) ||
-		match(value,
-		/\b(authorization|proxy-authorization)\b[ \t]+(basic|bearer|digest)\b[ \t]+/i);
+		/\b(user(name)?|login|password|pass(word)?|passwordeval|token|secret|credential|auth|api[_-]?key|access[_-]?key|client[_-]?secret|private[_-]?key)\b[ \t]+/i))
+		return true;
+
+	if (!match(value, /\b(authorization|proxy-authorization)\b[ \t]+/i))
+		return false;
+
+	return !match(value,
+		/^[ \t]*(authorization|proxy-authorization)[ \t]+failed[ \t]*$/i);
 };
 
 function sanitize_text(value, maximum, strip_prefix) {
