@@ -10,6 +10,7 @@ import { start_diagnostics } from 'diagnostics';
 import { render_diagnostic_report } from 'diagnostics';
 import { collect_interface_inventory } from 'interfaces';
 import { render_msmtp, render_message, split_recipients } from 'message';
+import { prepare_delivery, finish_delivery, close_delivery } from 'mail_delivery';
 import {
 	new_mail_test_tracker, begin_mail_test, finish_mail_test, start_mail_test
 } from 'mail_test';
@@ -24,7 +25,7 @@ import { public_status, write_status } from 'store';
 const RUNTIME_DIR = '/var/run/netwatch';
 const MSMTP_FILE = '/var/run/netwatch/msmtprc';
 const MSMTP_TEMP = '/var/run/netwatch/msmtprc.tmp';
-const MSMTP_COMMAND = `/usr/bin/msmtp --file=/var/run/netwatch/msmtprc --timeout=60 --read-envelope-from --read-recipients < "$1" >/dev/null 2>&1 &
+const MSMTP_COMMAND = `/usr/bin/msmtp --file=/var/run/netwatch/msmtprc --timeout=60 --read-envelope-from --read-recipients < "$1" > /dev/null 2> "$3" &
 child=$!
 trap 'kill -KILL "$child" 2>/dev/null; wait "$child" 2>/dev/null; exit 124' TERM INT
 wait "$child"
@@ -205,47 +206,6 @@ function start_monitor_check(monitor) {
 	return true;
 };
 
-function prepare_message_input(message) {
-	let message_file = fs.mkstemp(`${RUNTIME_DIR}/message-XXXXXX`);
-
-	if (!message_file)
-		return null;
-
-	let result_file = fs.mkstemp(`${RUNTIME_DIR}/result-XXXXXX`);
-
-	if (!result_file) {
-		message_file.close();
-		return null;
-	}
-
-	if (message_file.write(message) != length(message) ||
-		!message_file.flush() || !message_file.seek(0)) {
-		message_file.close();
-		result_file.close();
-		return null;
-	}
-
-	let message_descriptor = message_file.fileno();
-	let result_descriptor = result_file.fileno();
-
-	if (type(message_descriptor) != 'int' ||
-		type(result_descriptor) != 'int') {
-		message_file.close();
-		result_file.close();
-		return null;
-	}
-
-	// fs.mkstemp() unlinks both 0600 files immediately. The child inherits the
-	// descriptors and reopens them through procfs for input and its success
-	// marker. No message or result pathname remains in the runtime directory.
-	return {
-		message_file,
-		message_path: `/proc/self/fd/${message_descriptor}`,
-		result_file,
-		result_path: `/proc/self/fd/${result_descriptor}`
-	};
-};
-
 function kill_delivery_process(process_handle) {
 	let pid;
 
@@ -348,8 +308,12 @@ function start_delivery(message, callback) {
 	let process_handle = null;
 	let timeout_handle = null;
 	let completed = false;
-	let result_file = null;
+	let cancelled = false;
 	let context = { stop: null };
+	let resources = prepare_delivery(message);
+
+	if (!resources)
+		return false;
 
 	function cancel_delivery_timeout() {
 		if (!timeout_handle)
@@ -359,76 +323,51 @@ function start_delivery(message, callback) {
 		timeout_handle = null;
 	};
 
-	function close_delivery_result() {
-		if (!result_file)
-			return;
-
-		result_file.close();
-		result_file = null;
-	};
-
-	function delivery_result_succeeded() {
-		let delivered = false;
-
-		if (result_file) {
-			try {
-				delivered = !!result_file.seek(0) &&
-					result_file.read(2) == 'ok';
-			}
-			catch (error) {
-				delivered = false;
-			}
-		}
-
-		close_delivery_result();
-		return delivered;
-	};
-
-	function finish(delivered) {
+	function finish(outcome) {
 		if (completed)
 			return;
 
 		completed = true;
 		cancel_delivery_timeout();
-		close_delivery_result();
+		close_delivery(resources);
 		remove_active_delivery(context);
 
-		if (!shutting_down) callback(delivered === true);
+		if (!shutting_down) callback(outcome);
 	};
 
 	context.stop = () => {
+		cancelled = true;
 		cancel_delivery_timeout();
-		close_delivery_result();
+		close_delivery(resources);
 		kill_delivery_process(process_handle);
 	};
-
-	let input = prepare_message_input(message);
-
-	if (!input)
-		return false;
-
-	result_file = input.result_file;
 
 	try {
 		process_handle = uloop.process('/bin/sh',
 			['-c', MSMTP_COMMAND, 'netwatch-msmtp',
-				input.message_path, input.result_path], {},
+				resources.message_path, resources.result_path,
+				resources.stderr_path], {},
 			(exit_code) => {
-				let marker_present = delivery_result_succeeded();
-				finish(exit_code == 0 && marker_present);
+				if (completed)
+					return;
+
+				if (cancelled) {
+					finish(null);
+					return;
+				}
+
+				let outcome = finish_delivery(resources, exit_code, false);
+				finish(outcome);
 			}
 		);
 	}
 	catch (error) {
-		input.message_file.close();
-		close_delivery_result();
+		close_delivery(resources);
 		return false;
 	}
 
-	input.message_file.close();
-
 	if (!process_handle) {
-		close_delivery_result();
+		close_delivery(resources);
 		return false;
 	}
 
@@ -436,15 +375,20 @@ function start_delivery(message, callback) {
 
 	try {
 		timeout_handle = uloop.timer(MSMTP_PROCESS_TIMEOUT_MS, () => {
+			if (timeout_handle) {
+				timeout_handle.cancel();
+				timeout_handle = null;
+			}
+
 			kill_delivery_process(process_handle);
-			close_delivery_result();
-			finish(false);
+			let outcome = finish_delivery(resources, null, true);
+			finish(outcome);
 		});
 	}
 	catch (error) {
 		completed = true;
 		kill_delivery_process(process_handle);
-		close_delivery_result();
+		close_delivery(resources);
 		remove_active_delivery(context);
 		return false;
 	}
@@ -452,7 +396,7 @@ function start_delivery(message, callback) {
 	if (!timeout_handle) {
 		completed = true;
 		kill_delivery_process(process_handle);
-		close_delivery_result();
+		close_delivery(resources);
 		remove_active_delivery(context);
 		return false;
 	}

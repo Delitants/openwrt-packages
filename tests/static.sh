@@ -17,7 +17,7 @@ require_file packages/netwatch/netwatch/files/etc/config/netwatch-secrets
 require_file packages/netwatch/netwatch/files/etc/init.d/netwatch
 require_file packages/netwatch/netwatch/files/usr/libexec/netwatch-upgrade
 for module in \
-	alerts config diagnostics interface_probe interfaces mail_failure mail_test message migrate \
+	alerts config diagnostics interface_probe interfaces mail_delivery mail_failure mail_test message migrate \
 	netwatchd ping probe result rpc secrets state store
 do
 	require_file "packages/netwatch/netwatch/files/usr/share/netwatch/$module.uc"
@@ -47,6 +47,7 @@ require_file tests/in-sdk-source_test.sh
 require_file tests/package-output_test.sh
 require_file tests/upgrade-activation_test.sh
 require_file tests/luci-monitors_test.js
+require_file tests/unit/mail_delivery_test.uc
 require_file tests/unit/mail_failure_test.uc
 require_file tests/unit/message_string_test.uc
 
@@ -489,7 +490,12 @@ NODE
 		'const MSMTP_PROCESS_TIMEOUT_MS = 65000;' \
 		"uloop.process('/bin/sh'" \
 		"uloop.process('/bin/kill'" \
-		'delivery_result_succeeded' \
+		"import { prepare_delivery, finish_delivery, close_delivery } from 'mail_delivery';" \
+		'2> "$3" &' \
+		'resources.stderr_path' \
+		'finish_delivery(resources, exit_code, false)' \
+		'finish_delivery(resources, null, true)' \
+		'close_delivery(resources)' \
 		'const SHUTDOWN_TIMEOUT_MS = 5000;' \
 		'let active_deliveries = [];' \
 		'push(active_deliveries, context);' \
@@ -498,7 +504,7 @@ NODE
 		'scheduler.cancel();' \
 		'shutdown_timer.cancel();' \
 		'stop_active_delivery' \
-		'if (!shutting_down) callback(delivered === true);' \
+		'if (!shutting_down) callback(outcome);' \
 		'if (shutting_down && !length(active_deliveries))' \
 		'uloop.end()'
 	do
@@ -508,6 +514,18 @@ NODE
 			fail=1
 		fi
 	done
+
+	if grep -Fq -- '--debug' \
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+		echo 'msmtp debug output must not be enabled' >&2
+		fail=1
+	fi
+
+	if grep -Fq '>/dev/null 2>&1' \
+		"$root/packages/netwatch/netwatch/files/usr/share/netwatch/netwatchd.uc"; then
+		echo 'normal msmtp stderr is discarded instead of privately captured' >&2
+		fail=1
+	fi
 
 	for declaration in \
 		"import { collect_interface_inventory } from 'interfaces';" \
