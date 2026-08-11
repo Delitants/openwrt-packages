@@ -11,7 +11,7 @@ const MAIL_FAILURE_FIELDS = [
 	'stage', 'summary', 'detail', 'exit_code', 'exit_name', 'smtp_status'
 ];
 
-const MAIL_FAILURE_STAGES = {
+const MAIL_FAILURE_STAGES = Object.assign(Object.create(null), {
 	config: true,
 	render: true,
 	spawn: true,
@@ -22,15 +22,15 @@ const MAIL_FAILURE_STAGES = {
 	smtp: true,
 	timeout: true,
 	process: true
-};
+});
 
-const MAIL_FAILURE_EXIT_NAMES = {
+const MAIL_FAILURE_EXIT_NAMES = Object.assign(Object.create(null), {
 	69: 'EX_UNAVAILABLE',
 	74: 'EX_IOERR',
 	75: 'EX_TEMPFAIL',
 	77: 'EX_NOPERM',
 	78: 'EX_CONFIG'
-};
+});
 
 const callTestEmail = rpc.declare({
 	object: 'netwatch', method: 'test_email', params: [ 'recipient' ]
@@ -56,7 +56,7 @@ function delay(milliseconds) {
 }
 
 function waitForMailTest(id, deadline) {
-	return L.resolveDefault(callStatus(), null).then(status => {
+	return callStatus().then(status => {
 		const test = status && status.mail_test;
 
 		if (test && test.id === id && (test.state === 'sent' || test.state === 'failed'))
@@ -68,6 +68,28 @@ function waitForMailTest(id, deadline) {
 	});
 }
 
+function utf8Length(value) {
+	let length = 0;
+
+	for (let index = 0; index < value.length; index++) {
+		const code = value.charCodeAt(index);
+
+		if (code < 0x80)
+			length++;
+		else if (code < 0x800)
+			length += 2;
+		else if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length &&
+			value.charCodeAt(index + 1) >= 0xdc00 && value.charCodeAt(index + 1) <= 0xdfff) {
+			length += 4;
+			index++;
+		}
+		else
+			length += 3;
+	}
+
+	return length;
+}
+
 function validMailFailure(value) {
 	if (!value || typeof value !== 'object' || Array.isArray(value))
 		return null;
@@ -76,9 +98,10 @@ function validMailFailure(value) {
 	if (keys.length !== MAIL_FAILURE_FIELDS.length ||
 		!MAIL_FAILURE_FIELDS.every(field => Object.prototype.hasOwnProperty.call(value, field)))
 		return null;
-	if (typeof value.stage !== 'string' || !MAIL_FAILURE_STAGES[value.stage] ||
-		typeof value.summary !== 'string' || value.summary.length > 192 ||
-		typeof value.detail !== 'string' || value.detail.length > 512 ||
+	if (typeof value.stage !== 'string' ||
+		!Object.prototype.hasOwnProperty.call(MAIL_FAILURE_STAGES, value.stage) ||
+		typeof value.summary !== 'string' || utf8Length(value.summary) > 192 ||
+		typeof value.detail !== 'string' || utf8Length(value.detail) > 512 ||
 		(value.exit_code !== null && (!Number.isInteger(value.exit_code) ||
 			value.exit_code < 0 || value.exit_code > 255)) ||
 		(value.smtp_status !== null && (!Number.isInteger(value.smtp_status) ||

@@ -169,6 +169,11 @@ if [ "$fail" -eq 0 ]; then
 	menu_catalog="$root/packages/netwatch/luci-app-netwatch/root/usr/share/luci/menu.d/luci-app-netwatch.json"
 	acl_catalog="$root/packages/netwatch/luci-app-netwatch/root/usr/share/rpcd/acl.d/luci-app-netwatch.json"
 
+	if ! msgfmt --check --check-header -o /dev/null "$pot"; then
+		echo 'invalid LuCI POT header' >&2
+		fail=1
+	fi
+
 	for heading in Requirements Build Install Configure Troubleshooting Upgrade Uninstall; do
 		if ! grep -Fxq -- "## $heading" "$readme"; then
 			echo "missing README section: $heading" >&2

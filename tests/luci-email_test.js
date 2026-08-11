@@ -542,6 +542,75 @@ test('malformed failures retain the fixed local error', async () => {
 		'Test email could not be sent. Check the configuration and system log.');
 });
 
+test('prototype property names are not accepted as failure stages', async () => {
+	for (const stage of [ 'toString', 'constructor', '__proto__' ]) {
+		const failure = validFailure({ stage });
+		const harness = createHarness({
+			statusReplies: [ { version: 1, mail_test: failedMailTest(failure), monitors: [] } ]
+		});
+
+		await clickTestButton(harness);
+		assert.equal(notificationText(harness.notifications[0]),
+			'Test email could not be sent. Check the configuration and system log.', stage);
+	}
+});
+
+test('failure validator rejects invalid field types, ranges, and exit-name mismatches', async () => {
+	const invalidFailures = [
+		validFailure({ summary: 7 }),
+		validFailure({ detail: false }),
+		validFailure({ exit_code: -1 }),
+		validFailure({ exit_code: 256 }),
+		validFailure({ exit_code: 74.5 }),
+		validFailure({ exit_code: '74' }),
+		validFailure({ smtp_status: 199 }),
+		validFailure({ smtp_status: 600 }),
+		validFailure({ smtp_status: 535.5 }),
+		validFailure({ smtp_status: '535' }),
+		validFailure({ exit_name: 'EX_CONFIG' })
+	];
+
+	for (const failure of invalidFailures) {
+		const harness = createHarness({
+			statusReplies: [ { version: 1, mail_test: failedMailTest(failure), monitors: [] } ]
+		});
+
+		await clickTestButton(harness);
+		assert.equal(notificationText(harness.notifications[0]),
+			'Test email could not be sent. Check the configuration and system log.');
+	}
+});
+
+test('multibyte UTF-8 boundaries permit only backend-bounded summary and detail values', async () => {
+	const summaryAtLimit = 'é'.repeat(96);
+	const detailAtLimit = '😀'.repeat(128);
+	const validHarness = createHarness({
+		statusReplies: [ { version: 1, mail_test: failedMailTest(validFailure({
+			summary: summaryAtLimit, detail: detailAtLimit
+		})), monitors: [] } ]
+	});
+
+	await clickTestButton(validHarness);
+	assert.equal(textContent(validHarness.notifications[0].content.children[0]),
+		`Test email failed: ${summaryAtLimit}`,
+		'96 two-byte characters are exactly 192 UTF-8 bytes');
+	assert.equal(findElements(validHarness.notifications[0].content, 'dd')[1].children[0],
+		detailAtLimit, '128 four-byte characters are exactly 512 UTF-8 bytes');
+
+	for (const failure of [
+		validFailure({ summary: 'é'.repeat(97) }),
+		validFailure({ detail: '😀'.repeat(129) })
+	]) {
+		const harness = createHarness({
+			statusReplies: [ { version: 1, mail_test: failedMailTest(failure), monitors: [] } ]
+		});
+
+		await clickTestButton(harness);
+		assert.equal(notificationText(harness.notifications[0]),
+			'Test email could not be sent. Check the configuration and system log.');
+	}
+});
+
 test('polling has a bounded timeout and reports a fixed timeout notification', async () => {
 	const sending = {
 		version: 1,
@@ -570,6 +639,22 @@ test('secret-bearing RPC failures retain the fixed local error', async () => {
 	assert.equal(notificationText(harness.notifications[0]),
 		'Test email could not be sent. Check the configuration and system log.');
 	assert.equal(JSON.stringify(harness.notifications).includes('secret-bearing-exception'), false);
+});
+
+test('status RPC rejection immediately retains the fixed local error', async () => {
+	const harness = createHarness({
+		statusReplies: [ new Error('smtp-password=status-rpc-secret') ]
+	});
+
+	const completion = clickTestButton(harness);
+	await flushPromises();
+	assert.equal(harness.timers.length, 0,
+		'status RPC rejection must not be converted into a polling timeout');
+	await completion;
+	assert.equal(harness.map.button.disabled, false);
+	assert.equal(notificationText(harness.notifications[0]),
+		'Test email could not be sent. Check the configuration and system log.');
+	assert.equal(JSON.stringify(harness.notifications).includes('status-rpc-secret'), false);
 });
 
 (async () => {
