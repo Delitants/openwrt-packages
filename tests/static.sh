@@ -47,6 +47,7 @@ require_file tests/in-sdk-source_test.sh
 require_file tests/package-output_test.sh
 require_file tests/upgrade-activation_test.sh
 require_file tests/luci-monitors_test.js
+require_file tests/luci-email_test.js
 require_file tests/unit/mail_delivery_test.uc
 require_file tests/unit/mail_failure_test.uc
 require_file tests/unit/message_string_test.uc
@@ -71,6 +72,7 @@ if [ "$fail" -eq 0 ]; then
 	"$root/tests/package-output_test.sh" || fail=1
 	"$root/tests/upgrade-activation_test.sh" || fail=1
 	node "$root/tests/luci-monitors_test.js" || fail=1
+	node "$root/tests/luci-email_test.js" || fail=1
 fi
 
 if ! grep -Fq '# call BuildPackage - OpenWrt buildroot signature' \

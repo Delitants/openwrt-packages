@@ -7,6 +7,31 @@
 
 let testEmailInFlight = false;
 
+const MAIL_FAILURE_FIELDS = [
+	'stage', 'summary', 'detail', 'exit_code', 'exit_name', 'smtp_status'
+];
+
+const MAIL_FAILURE_STAGES = {
+	config: true,
+	render: true,
+	spawn: true,
+	dns: true,
+	network: true,
+	tls: true,
+	auth: true,
+	smtp: true,
+	timeout: true,
+	process: true
+};
+
+const MAIL_FAILURE_EXIT_NAMES = {
+	69: 'EX_UNAVAILABLE',
+	74: 'EX_IOERR',
+	75: 'EX_TEMPFAIL',
+	77: 'EX_NOPERM',
+	78: 'EX_CONFIG'
+};
+
 const callTestEmail = rpc.declare({
 	object: 'netwatch', method: 'test_email', params: [ 'recipient' ]
 });
@@ -35,12 +60,75 @@ function waitForMailTest(id, deadline) {
 		const test = status && status.mail_test;
 
 		if (test && test.id === id && (test.state === 'sent' || test.state === 'failed'))
-			return test.state;
+			return test;
 		if (Date.now() >= deadline)
 			return 'timeout';
 
 		return delay(1000).then(() => waitForMailTest(id, deadline));
 	});
+}
+
+function validMailFailure(value) {
+	if (!value || typeof value !== 'object' || Array.isArray(value))
+		return null;
+
+	const keys = Object.keys(value);
+	if (keys.length !== MAIL_FAILURE_FIELDS.length ||
+		!MAIL_FAILURE_FIELDS.every(field => Object.prototype.hasOwnProperty.call(value, field)))
+		return null;
+	if (typeof value.stage !== 'string' || !MAIL_FAILURE_STAGES[value.stage] ||
+		typeof value.summary !== 'string' || value.summary.length > 192 ||
+		typeof value.detail !== 'string' || value.detail.length > 512 ||
+		(value.exit_code !== null && (!Number.isInteger(value.exit_code) ||
+			value.exit_code < 0 || value.exit_code > 255)) ||
+		(value.smtp_status !== null && (!Number.isInteger(value.smtp_status) ||
+			value.smtp_status < 200 || value.smtp_status > 599)))
+		return null;
+
+	const exitName = value.exit_code === null ? null :
+		(MAIL_FAILURE_EXIT_NAMES[value.exit_code] || null);
+	if (value.exit_name !== exitName)
+		return null;
+
+	return {
+		stage: value.stage,
+		summary: value.summary,
+		detail: value.detail,
+		exit_code: value.exit_code,
+		exit_name: value.exit_name,
+		smtp_status: value.smtp_status
+	};
+}
+
+function formatExit(exitName, exitCode) {
+	if (exitCode === null)
+		return _('Unavailable');
+
+	return exitName ? `${exitName} (${exitCode})` : String(exitCode);
+}
+
+function showMailTestFailure(test, failure) {
+	const testId = Number.isInteger(test && test.id) ? String(test.id) :
+		_('Unavailable');
+
+	ui.addNotification(null, E('div', {}, [
+		E('p', {}, _('Test email failed: %s').format(failure.summary)),
+		E('details', {}, [
+			E('summary', {}, _('Show technical details')),
+			E('dl', {}, [
+				E('dt', {}, _('Stage')),
+				E('dd', {}, failure.stage),
+				E('dt', {}, _('Detail')),
+				E('dd', {}, failure.detail || _('Unavailable')),
+				E('dt', {}, _('Exit')),
+				E('dd', {}, formatExit(failure.exit_name, failure.exit_code)),
+				E('dt', {}, _('SMTP status')),
+				E('dd', {}, failure.smtp_status === null ? _('Unavailable') : String(failure.smtp_status)),
+				E('dt', {}, _('Test ID')),
+				E('dd', {}, testId)
+			])
+		])
+	]), 'error');
 }
 
 function setTestEmailBusy(map, busy) {
@@ -188,16 +276,28 @@ return view.extend({
 				})
 				.then(() => callTestEmail(recipient))
 				.then(result => {
+					if (result && result.ok === false) {
+						const failure = validMailFailure(result.failure);
+						if (!failure)
+							throw new Error('test failed');
+
+						return { id: null, state: 'failed', failure };
+					}
 					if (!result || result.ok !== true || !Number.isInteger(result.id))
 						throw new Error('test failed');
 
 					return waitForMailTest(result.id, Date.now() + 70000);
 				})
-				.then(state => {
-					if (state === 'sent')
+				.then(test => {
+					if (test && test.state === 'sent')
 						ui.addNotification(null, E('p', _('Test email sent successfully.')), 'info');
-					else if (state === 'failed')
-						ui.addNotification(null, E('p', _('Test email could not be sent. Check the configuration and system log.')), 'error');
+					else if (test && test.state === 'failed') {
+						const failure = validMailFailure(test.failure);
+						if (!failure)
+							throw new Error('test failed');
+
+						showMailTestFailure(test, failure);
+					}
 					else
 						ui.addNotification(null, E('p', _('Timed out waiting for the test email result. Check the system log.')), 'error');
 				})

@@ -158,7 +158,7 @@ function createHarness(options = {}) {
 	};
 	const ui = {
 		addNotification(title, content, level) {
-			notifications.push({ text: content.text, level });
+			notifications.push({ content, level });
 		}
 	};
 	const form = {
@@ -182,10 +182,18 @@ function createHarness(options = {}) {
 		}
 	};
 	const FakeDate = { now: () => now };
-	const E = (tag, attributes, children) => ({
-		tag,
-		text: children === undefined ? attributes : children
-	});
+	const E = (tag, attributes, children) => {
+		if (children === undefined) {
+			children = attributes;
+			attributes = {};
+		}
+
+		return {
+			tag,
+			attributes: attributes || {},
+			children: Array.isArray(children) ? children : [ children ]
+		};
+	};
 	const translate = value => value;
 
 	const definition = new Function(
@@ -237,6 +245,65 @@ async function clickTestButton(harness) {
 	const buttonOption = harness.option('_test_email');
 	assert.ok(buttonOption, 'test email button exists');
 	return buttonOption.onclick.call(buttonOption, {}, 'smtp');
+}
+
+function textContent(node) {
+	if (node == null)
+		return '';
+	if (typeof node === 'string' || typeof node === 'number')
+		return String(node);
+	if (Array.isArray(node))
+		return node.map(textContent).join('');
+	return textContent(node.children);
+}
+
+function findElements(node, tag, result = []) {
+	if (node && typeof node === 'object' && !Array.isArray(node)) {
+		if (node.tag === tag)
+			result.push(node);
+		findElements(node.children, tag, result);
+	}
+	else if (Array.isArray(node)) {
+		for (const child of node)
+			findElements(child, tag, result);
+	}
+
+	return result;
+}
+
+function validFailure(overrides = {}) {
+	return Object.assign({
+		stage: 'network',
+		summary: 'SMTP network I/O failed.',
+		detail: 'connection timed out',
+		exit_code: 74,
+		exit_name: 'EX_IOERR',
+		smtp_status: null
+	}, overrides);
+}
+
+function failedMailTest(failure) {
+	return {
+		id: 7,
+		state: 'failed',
+		started: 100,
+		completed: 101,
+		error: failure.summary,
+		failure
+	};
+}
+
+function notificationText(notification) {
+	return textContent(notification.content);
+}
+
+if (!String.prototype.format) {
+	Object.defineProperty(String.prototype, 'format', {
+		value(...values) {
+			let index = 0;
+			return this.replace(/%[sd]/g, () => String(values[index++]));
+		}
+	});
 }
 
 const tests = [];
@@ -346,15 +413,43 @@ test('test email stays busy while polling and completes on matching sent state',
 	await completion;
 	assert.equal(harness.map.button.disabled, false);
 	assert.deepEqual(harness.notifications, [
-		{ text: 'Test email sent successfully.', level: 'info' }
+		{
+			content: {
+				tag: 'p', attributes: {},
+				children: [ 'Test email sent successfully.' ]
+			},
+			level: 'info'
+		}
 	]);
 });
 
-test('matching failed state uses a fixed notification and releases the button', async () => {
+test('a second click is ignored while the first test waits for its matching result', async () => {
 	const harness = createHarness({
 		statusReplies: [
 			{ version: 1, mail_test: { id: 7, state: 'sending', started: 100, completed: null, error: null }, monitors: [] },
-			{ version: 1, mail_test: { id: 7, state: 'failed', started: 100, completed: 101, error: 'mail delivery failed' }, monitors: [] }
+			{ version: 1, mail_test: { id: 7, state: 'sent', started: 100, completed: 101, error: null, failure: null }, monitors: [] }
+		]
+	});
+	const first = clickTestButton(harness);
+	const second = clickTestButton(harness);
+
+	await second;
+	await flushPromises();
+	assert.equal(harness.map.button.disabled, true);
+	assert.deepEqual(harness.rpcCalls.filter(call => call[0] === 'test_email'),
+		[ [ 'test_email', '' ] ]);
+	harness.runTimer();
+	await first;
+	assert.equal(harness.map.button.disabled, false);
+	assert.equal(notificationText(harness.notifications[0]), 'Test email sent successfully.');
+});
+
+test('matching failed state renders a collapsed six-field disclosure from the terminal object', async () => {
+	const failure = validFailure();
+	const harness = createHarness({
+		statusReplies: [
+			{ version: 1, mail_test: { id: 7, state: 'sending', started: 100, completed: null, error: null }, monitors: [] },
+			{ version: 1, mail_test: failedMailTest(failure), monitors: [] }
 		]
 	});
 	const completion = clickTestButton(harness);
@@ -363,10 +458,88 @@ test('matching failed state uses a fixed notification and releases the button', 
 	harness.runTimer();
 	await completion;
 	assert.equal(harness.map.button.disabled, false);
-	assert.deepEqual(harness.notifications, [ {
-		text: 'Test email could not be sent. Check the configuration and system log.',
-		level: 'error'
-	} ]);
+	assert.equal(harness.notifications.length, 1);
+	const notification = harness.notifications[0];
+	assert.equal(notification.level, 'error');
+	assert.equal(notification.content.tag, 'div');
+	assert.equal(textContent(notification.content.children[0]),
+		'Test email failed: SMTP network I/O failed.');
+
+	const details = findElements(notification.content, 'details');
+	assert.equal(details.length, 1);
+	assert.equal(Object.hasOwn(details[0].attributes, 'open'), false,
+		'technical details are collapsed by default');
+	assert.deepEqual(findElements(details[0], 'summary').map(textContent),
+		[ 'Show technical details' ]);
+	assert.deepEqual(findElements(details[0], 'dt').map(textContent),
+		[ 'Stage', 'Detail', 'Exit', 'SMTP status', 'Test ID' ]);
+	assert.deepEqual(findElements(details[0], 'dd').map(textContent),
+		[ 'network', 'connection timed out', 'EX_IOERR (74)', 'Unavailable', '7' ]);
+});
+
+test('immediate test_email failure renders the same validated disclosure without polling', async () => {
+	const failure = validFailure({
+		stage: 'config',
+		summary: 'SMTP configuration is invalid.',
+		detail: 'account is incomplete',
+		exit_code: null,
+		exit_name: null,
+		smtp_status: 535
+	});
+	const harness = createHarness({
+		testEmailReplies: [ { ok: false, failure } ]
+	});
+
+	await clickTestButton(harness);
+	assert.deepEqual(harness.events, [ 'save', 'apply', 'test_email' ]);
+	assert.equal(harness.map.button.disabled, false);
+	assert.equal(harness.notifications.length, 1);
+	assert.equal(notificationText(harness.notifications[0]),
+		'Test email failed: SMTP configuration is invalid.Show technical detailsStageconfigDetailaccount is incompleteExitUnavailableSMTP status535Test IDUnavailable');
+});
+
+test('hostile server text is retained only as text child nodes', async () => {
+	const hostileDetail = '<img src=x onerror="password=leaked">';
+	const failure = validFailure({ detail: hostileDetail });
+	const harness = createHarness({
+		statusReplies: [ { version: 1, mail_test: failedMailTest(failure), monitors: [] } ]
+	});
+
+	await clickTestButton(harness);
+	const notification = harness.notifications[0];
+	assert.equal(findElements(notification.content, 'img').length, 0);
+	assert.equal(findElements(notification.content, 'dd')[1].children[0], hostileDetail);
+});
+
+test('extra or secret-bearing failure properties are never rendered', async () => {
+	const failure = validFailure({
+		password: 'smtp-password-secret',
+		username: 'smtp-user-secret',
+		address: 'ops@example.test',
+		token: 'rpc-token-secret',
+		unexpected: 'untrusted-extra-value'
+	});
+	const harness = createHarness({
+		statusReplies: [ { version: 1, mail_test: failedMailTest(failure), monitors: [] } ]
+	});
+
+	await clickTestButton(harness);
+	assert.equal(notificationText(harness.notifications[0]),
+		'Test email could not be sent. Check the configuration and system log.');
+	for (const secret of [ 'smtp-password-secret', 'smtp-user-secret',
+		'ops@example.test', 'rpc-token-secret', 'untrusted-extra-value' ])
+		assert.equal(notificationText(harness.notifications[0]).includes(secret), false);
+});
+
+test('malformed failures retain the fixed local error', async () => {
+	const failure = validFailure({ stage: 'invented-stage' });
+	const harness = createHarness({
+		statusReplies: [ { version: 1, mail_test: failedMailTest(failure), monitors: [] } ]
+	});
+
+	await clickTestButton(harness);
+	assert.equal(notificationText(harness.notifications[0]),
+		'Test email could not be sent. Check the configuration and system log.');
 });
 
 test('polling has a bounded timeout and reports a fixed timeout notification', async () => {
@@ -384,22 +557,18 @@ test('polling has a bounded timeout and reports a fixed timeout notification', a
 	await completion;
 	assert.equal(harness.map.button.disabled, false);
 	assert.equal(harness.timers.length, 0);
-	assert.deepEqual(harness.notifications, [ {
-		text: 'Timed out waiting for the test email result. Check the system log.',
-		level: 'error'
-	} ]);
+	assert.equal(notificationText(harness.notifications[0]),
+		'Timed out waiting for the test email result. Check the system log.');
 });
 
-test('secret-bearing RPC failures never reach notifications', async () => {
+test('secret-bearing RPC failures retain the fixed local error', async () => {
 	const harness = createHarness({
 		testEmailReplies: [ new Error('smtp-password=secret-bearing-exception') ]
 	});
 	await clickTestButton(harness);
 	assert.equal(harness.notifications.length, 1);
-	assert.deepEqual(harness.notifications[0], {
-		text: 'Test email could not be sent. Check the configuration and system log.',
-		level: 'error'
-	});
+	assert.equal(notificationText(harness.notifications[0]),
+		'Test email could not be sent. Check the configuration and system log.');
 	assert.equal(JSON.stringify(harness.notifications).includes('secret-bearing-exception'), false);
 });
 
