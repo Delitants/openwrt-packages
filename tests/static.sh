@@ -241,13 +241,14 @@ const verification = section('Build verification', 'Install');
 const configure = section('Configure', 'Package feed maintenance');
 const errors = [];
 
-if (!build.includes('The source tree is prepared for the 1.1.0-r3 release outputs.') ||
-	!build.includes('After a later build, signing, and feed publication, the signed feed will contain `netwatch-1.1.0-r3` and `luci-app-netwatch-1.1.0-r3`.'))
-	errors.push('README must identify r3 as prepared but not yet published');
+if (!build.includes('The 1.1.0-r3 release artifacts use the stable output names above.') ||
+	!build.includes('The signed repository feed for this release contains `netwatch-1.1.0-r3` and `luci-app-netwatch-1.1.0-r3`.') ||
+	!build.includes('This source document does not attest to public-byte equality or live-router verification.'))
+	errors.push('README must describe the signed local r3 release without temporal publication claims');
 
-if (build.includes('These are the published 1.1.0-r3 release outputs.') ||
-	build.includes('The signed feed contains `netwatch-1.1.0-r3` and `luci-app-netwatch-1.1.0-r3`.'))
-	errors.push('README must not claim that r3 outputs or feed artifacts are already published');
+if (build.includes('The source tree is prepared for the 1.1.0-r3 release outputs.') ||
+	build.includes('After a later build, signing, and feed publication'))
+	errors.push('README must not retain pre-publication future-tense r3 wording');
 
 if (!verification.startsWith('## Build verification Release artifacts must be built with the pinned OpenWrt 25.12.5 x86/64 SDK and verified with its apk-tools 3.0.5.'))
 	errors.push('README build verification must require pinned-SDK build and artifact verification');

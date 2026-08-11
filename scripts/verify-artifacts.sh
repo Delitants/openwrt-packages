@@ -216,6 +216,7 @@ if find "$tmp/extracted/luci" -type f \( -name '*.pot' -o -name '*.po' \) \
 fi
 
 tar -tzf "$root/$source_archive" > "$tmp/source-files"
+"$root/scripts/verify-source-archive.sh" "$root/$source_archive"
 duplicates=$(LC_ALL=C sort "$tmp/source-files" | uniq -d)
 if [ -n "$duplicates" ]; then
 	echo 'error: duplicate source archive paths' >&2

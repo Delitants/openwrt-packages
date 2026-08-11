@@ -41,6 +41,42 @@ function exit_name(exit_code) {
 	return null;
 };
 
+function normalize_utf8(value) {
+	let output = '';
+	for (let offset = 0; offset < length(value);) {
+		let first = ord(substr(value, offset, 1));
+		let width = 0;
+		if (first < 128) width = 1;
+		else if (first >= 194 && first <= 223) width = 2;
+		else if (first >= 224 && first <= 239) width = 3;
+		else if (first >= 240 && first <= 244) width = 4;
+
+		let valid = width > 0 && offset + width <= length(value);
+		if (valid && width > 1) {
+			let second = ord(substr(value, offset + 1, 1));
+			valid = second >= 128 && second <= 191 &&
+				!(first == 224 && second < 160) &&
+				!(first == 237 && second > 159) &&
+				!(first == 240 && second < 144) &&
+				!(first == 244 && second > 143);
+		}
+		for (let index = 2; valid && index < width; index++) {
+			let continuation = ord(substr(value, offset + index, 1));
+			valid = continuation >= 128 && continuation <= 191;
+		}
+
+		if (valid) {
+			output += substr(value, offset, width);
+			offset += width;
+		}
+		else {
+			output += '?';
+			offset++;
+		}
+	}
+	return output;
+};
+
 function truncate_text(value, maximum) {
 	if (length(value) <= maximum) return value;
 
@@ -82,6 +118,7 @@ function credential_line(value) {
 function sanitize_text(value, maximum, strip_prefix) {
 	if (type(value) != 'string') return '';
 
+	value = normalize_utf8(value);
 	value = replace(value, /\r\n?/g, '\n');
 	let output = [];
 	let private_key = false;

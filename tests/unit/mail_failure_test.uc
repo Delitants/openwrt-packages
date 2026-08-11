@@ -38,6 +38,41 @@ function valid_utf8(value) {
 	return true;
 };
 
+function assert_utf8_failure(failure, expected_detail, hostile_bytes, label) {
+	equal(failure.detail, expected_detail, `${label} uses a fixed safe replacement`);
+	truthy(valid_utf8(failure.summary), `${label} summary is valid UTF-8`);
+	truthy(valid_utf8(failure.detail), `${label} detail is valid UTF-8`);
+	truthy(valid_utf8(sprintf('%J', failure)),
+		`${label} public JSON serialization is valid UTF-8`);
+	for (let hostile in hostile_bytes)
+		equal(length(split(failure.detail, hostile)), 1,
+			`${label} hostile byte is absent`);
+	deep_equal(public_mail_failure(failure), failure,
+		`${label} public projection is deterministic and idempotent`);
+};
+
+// Production bug caught: literal 0xff from SMTP stderr reaches public JSON.
+assert_utf8_failure(classify_mail_failure(74,
+	'msmtp: network read error \xff timed out', false, null),
+	'network read error ? timed out', [ '\xff' ], 'literal 0xff');
+
+// Production bug caught: a lone UTF-8 continuation byte survives sanitization.
+assert_utf8_failure(classify_mail_failure(74,
+	'msmtp: connection \x80 refused', false, null),
+	'connection ? refused', [ '\x80' ], 'lone continuation byte');
+
+// Production bug caught: an overlong UTF-8 encoding survives sanitization.
+assert_utf8_failure(classify_mail_failure(75,
+	'msmtp: server message: 550 \xc0\xaf rejected', false, 550),
+	'server message: 550 ?? rejected', [ '\xc0', '\xaf' ],
+	'overlong UTF-8 encoding');
+
+// Production bug caught: a truncated UTF-8 sequence survives sanitization.
+assert_utf8_failure(classify_mail_failure(75,
+	'msmtp: TLS certificate \xe2\x82 failed', false, null),
+	'TLS certificate ?? failed', [ '\xe2', '\x82' ],
+	'truncated UTF-8 sequence');
+
 // Production bug caught: a network-read failure is flattened into a generic error.
 deep_equal(classify_mail_failure(74,
 	'msmtp: network read error: the operation timed out', false, null), {

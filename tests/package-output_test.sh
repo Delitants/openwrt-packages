@@ -5,13 +5,20 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/netwatch-package-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
-mkdir -p "$tmp/scripts" "$tmp/work/sdk/bin/packages/base"
+mkdir -p "$tmp/scripts" "$tmp/feed/x86_64" \
+	"$tmp/work/sdk/bin/packages/base"
 cp "$root/scripts/package-output.sh" "$tmp/scripts/package-output.sh"
+cp "$root/scripts/verify-source-archive.sh" \
+	"$tmp/scripts/verify-source-archive.sh"
 cp "$root/README.md" "$tmp/README.md"
 printf 'runtime apk fixture\n' > "$tmp/work/sdk/bin/packages/base/netwatch-1.1.0-r3.apk"
 printf 'luci apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-netwatch-1.1.0-r3.apk"
 printf 'scheduled backup apk fixture\n' > \
 	"$tmp/work/sdk/bin/packages/base/luci-app-scheduled-backup-1.0.0-r3.apk"
+printf 'obsolete runtime signed r2 feed fixture\n' > \
+	"$tmp/feed/x86_64/netwatch-1.1.0-r2.apk"
+printf 'obsolete luci signed r2 feed fixture\n' > \
+	"$tmp/feed/x86_64/luci-app-netwatch-1.1.0-r2.apk"
 
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" init -q
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
@@ -19,9 +26,33 @@ git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
 	config user.email 'netwatch-tests@example.invalid'
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
-	add README.md scripts/package-output.sh
+	add README.md scripts/package-output.sh scripts/verify-source-archive.sh \
+	feed/x86_64/netwatch-1.1.0-r2.apk \
+	feed/x86_64/luci-app-netwatch-1.1.0-r2.apk
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
-	commit -q -m 'fixture source'
+	commit -q -m 'stale r2 fixture source'
+
+source_name=openwrt-netwatch-1.1.0
+stale_archive=$tmp/stale-source.tar
+git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
+	-c tar.umask=0022 archive --format=tar --prefix="$source_name/" \
+	HEAD > "$stale_archive"
+gzip -n -f "$stale_archive"
+stale_archive=$stale_archive.gz
+
+rm "$tmp/feed/x86_64/netwatch-1.1.0-r2.apk" \
+	"$tmp/feed/x86_64/luci-app-netwatch-1.1.0-r2.apk"
+printf 'runtime signed r3 feed fixture\n' > \
+	"$tmp/feed/x86_64/netwatch-1.1.0-r3.apk"
+printf 'luci signed r3 feed fixture\n' > \
+	"$tmp/feed/x86_64/luci-app-netwatch-1.1.0-r3.apk"
+git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
+	add -u feed/x86_64
+git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
+	add feed/x86_64/netwatch-1.1.0-r3.apk \
+	feed/x86_64/luci-app-netwatch-1.1.0-r3.apk
+git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
+	commit -q -m 'current r3 fixture source'
 
 printf 'must not be released\n' > "$tmp/local-only.secret"
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
@@ -32,6 +63,11 @@ git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
 )
 
 archive=$tmp/outputs/openwrt-netwatch-1.1.0-source.tar.gz
+"$tmp/scripts/verify-source-archive.sh" "$archive"
+if "$tmp/scripts/verify-source-archive.sh" "$stale_archive" >/dev/null 2>&1; then
+	echo 'source archive verifier accepts obsolete r2 feed APKs' >&2
+	exit 1
+fi
 for artifact in \
 	netwatch_1.1.0-r3_all.apk \
 	luci-app-netwatch_1.1.0-r3_all.apk \
