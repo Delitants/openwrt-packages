@@ -581,6 +581,41 @@ test('failure validator rejects invalid field types, ranges, and exit-name misma
 	}
 });
 
+test('numeric stage or exit name in an exact failure object retains the local fallback', async () => {
+	const injectedValues = [
+		'number-stage-injected-content',
+		'number-exit-name-injected-content'
+	];
+	const failures = [
+		validFailure({
+			stage: 7,
+			summary: injectedValues[0],
+			detail: '<img src=x onerror="number-stage-injected-content">'
+		}),
+		validFailure({
+			exit_name: 74,
+			summary: injectedValues[1],
+			detail: '<img src=x onerror="number-exit-name-injected-content">'
+		})
+	];
+
+	for (const failure of failures) {
+		assert.deepEqual(Object.keys(failure).sort(), [
+			'detail', 'exit_code', 'exit_name', 'smtp_status', 'stage', 'summary'
+		], 'fixture remains an exact six-field object');
+		const harness = createHarness({
+			statusReplies: [ { version: 1, mail_test: failedMailTest(failure), monitors: [] } ]
+		});
+
+		await clickTestButton(harness);
+		assert.equal(notificationText(harness.notifications[0]),
+			'Test email could not be sent. Check the configuration and system log.');
+		for (const value of injectedValues)
+			assert.equal(notificationText(harness.notifications[0]).includes(value), false);
+		assert.equal(findElements(harness.notifications[0].content, 'img').length, 0);
+	}
+});
+
 test('multibyte UTF-8 boundaries permit only backend-bounded summary and detail values', async () => {
 	const summaryAtLimit = 'é'.repeat(96);
 	const detailAtLimit = '😀'.repeat(128);
