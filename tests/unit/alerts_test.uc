@@ -67,6 +67,15 @@ equal(retry.next_mail_attempt, 400, 'failed send records retry backoff');
 equal(due_alert(retry, retry_monitor, 399), null, 'retry backoff suppresses early send');
 equal(due_alert(retry, retry_monitor, 400), 'failure',
 	'failed failure mail becomes due after backoff');
+mail_succeeded(retry, 'failure', 400);
+equal(retry.failure_emails, 1,
+	'successful retry consumes exactly one failure-email allowance');
+equal(retry.next_mail_attempt, null,
+	'successful retry clears the failed delivery backoff');
+equal(due_alert(retry, retry_monitor, 999), null,
+	'successful retry starts the repeat interval from actual delivery');
+equal(due_alert(retry, retry_monitor, 1000), 'failure',
+	'successful retry schedules the next permitted repeat normally');
 
 let recovery = {
 	status: 'healthy', incident_started: null,

@@ -17,7 +17,8 @@ equal(status.monitors[0].last_transition, 25, 'last transition published');
 equal(match(sprintf('%J', status), /must not persist/), null, 'diagnostic report omitted');
 truthy(type(status.monitors[0].last_result.evidence) == 'object', 'compact evidence retained');
 deep_equal(status.mail_test, {
-	id: 1, state: 'sending', started: 15, completed: null, error: null
+	id: 1, state: 'sending', started: 15, completed: null, error: null,
+	failure: null
 }, 'public status includes only bounded test email state');
 equal(match(sprintf('%J', status), /public-mail-test-secret/), null,
 	'mail test tracker secret omitted');

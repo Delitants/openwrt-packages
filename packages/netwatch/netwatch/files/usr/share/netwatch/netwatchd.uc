@@ -13,6 +13,7 @@ import { render_msmtp, render_message, split_recipients } from 'message';
 import {
 	prepare_delivery, finish_delivery, close_delivery, start_delivery_with
 } from 'mail_delivery';
+import { fixed_mail_failure, public_mail_failure } from 'mail_failure';
 import {
 	new_mail_test_tracker, begin_mail_test, finish_mail_test, start_mail_test
 } from 'mail_test';
@@ -355,7 +356,7 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 	}
 	catch (error) {
 		state.mail_busy = false;
-		alert_render_failed(state, now, 'recipient is invalid');
+		alert_render_failed(state, now, 'message rendering failed');
 		return false;
 	}
 
@@ -364,7 +365,7 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 		: state.recovery_pending?.incident_started;
 	let delivery_started = start_delivery(
 		message,
-		(delivered) => {
+		(outcome) => {
 			state.mail_busy = false;
 
 			if (!monitor_state_is_current(monitor.id, state))
@@ -375,14 +376,15 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 					state.incident_started == incident_started
 				: state.recovery_pending?.incident_started == incident_started;
 
-			if (same_incident && delivered === true) {
+			if (same_incident && outcome?.ok === true) {
 				mail_succeeded(state, kind, time());
 				mail_error = null;
 				log.syslog('info', 'monitor %s %s mail delivered', monitor.id, kind);
 			}
 			else if (same_incident) {
+				let failure = public_mail_failure(outcome?.failure);
 				mail_failed(state, time(), global_config.mail_retry_backoff);
-				mail_error = 'mail delivery failed';
+				mail_error = failure?.summary ?? 'mail delivery failed';
 				log.syslog('err', 'monitor %s %s mail delivery failed', monitor.id, kind);
 			}
 
@@ -396,7 +398,8 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 	if (!delivery_started) {
 		state.mail_busy = false;
 		mail_failed(state, now, global_config.mail_retry_backoff);
-		mail_error = 'mail delivery failed';
+		mail_error = fixed_mail_failure(
+			'spawn', 'Unable to start SMTP delivery.', '').summary;
 		persist_status();
 		return false;
 	}
@@ -613,22 +616,28 @@ function test_message(recipients, now) {
 	});
 };
 
+function reject_mail_test(stage, summary) {
+	let failure = fixed_mail_failure(stage, summary, '');
+
+	return { ok: false, error: failure.summary, failure };
+};
+
 function request_test_email(request) {
 	let message;
 	let started_at;
 
 	try {
 		if (shutting_down)
-			return { ok: false, error: 'service stopping' };
+			return reject_mail_test('process', 'service stopping');
 
 		if (mail_work_active())
-			return { ok: false, error: 'mail delivery already running' };
+			return reject_mail_test('process', 'mail delivery already running');
 
 		if (!load_configuration())
-			return { ok: false, error: 'configuration reload failed' };
+			return reject_mail_test('config', 'configuration reload failed');
 
 		if (!mail_config_ready)
-			return { ok: false, error: 'mail configuration invalid' };
+			return reject_mail_test('config', 'mail configuration invalid');
 
 		let recipient = request.args?.recipient;
 		let configured = type(recipient) == 'string' && recipient != ''
@@ -636,7 +645,7 @@ function request_test_email(request) {
 			: global_config.recipients;
 
 		if (configured == '')
-			return { ok: false, error: 'recipient is required' };
+			return reject_mail_test('config', 'recipient is required');
 
 		let recipients;
 
@@ -644,14 +653,20 @@ function request_test_email(request) {
 			recipients = split_recipients(configured);
 		}
 		catch (error) {
-			return { ok: false, error: 'recipient is invalid' };
+			return reject_mail_test('config', 'recipient is invalid');
 		}
 
 		started_at = time();
-		message = test_message(recipients, started_at);
+
+		try {
+			message = test_message(recipients, started_at);
+		}
+		catch (error) {
+			return reject_mail_test('render', 'message rendering failed');
+		}
 	}
 	catch (error) {
-		return { ok: false, error: 'test email failed' };
+		return reject_mail_test('process', 'test email failed');
 	}
 
 	return start_mail_test(
