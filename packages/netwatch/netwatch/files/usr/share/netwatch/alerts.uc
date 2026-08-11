@@ -1,3 +1,11 @@
+import { fixed_mail_failure, public_mail_failure } from 'mail_failure';
+
+const ALERT_FAILURES = {
+	config: [ 'config', 'mail configuration invalid' ],
+	render: [ 'render', 'message rendering failed' ],
+	spawn: [ 'spawn', 'Unable to start SMTP delivery.' ]
+};
+
 export function due_alert(state, monitor, now) {
 	if (state.next_mail_attempt != null && now < state.next_mail_attempt)
 		return null;
@@ -40,4 +48,26 @@ export function mail_succeeded(state, kind, now) {
 
 export function mail_failed(state, now, retry_backoff) {
 	state.next_mail_attempt = now + retry_backoff;
+};
+
+export function record_alert_failure(state, now, retry_backoff, reason) {
+	let mapping = ALERT_FAILURES[reason] ??
+		[ 'process', 'SMTP delivery process failed.' ];
+	let failure = fixed_mail_failure(mapping[0], mapping[1], '');
+
+	mail_failed(state, now, retry_backoff);
+	return { ok: false, error: failure.summary, failure };
+};
+
+export function apply_alert_delivery_outcome(
+	state, kind, now, retry_backoff, outcome
+) {
+	if (outcome?.ok === true) {
+		mail_succeeded(state, kind, now);
+		return { ok: true, error: null, failure: null };
+	}
+
+	let failure = public_mail_failure(outcome?.failure ?? {});
+	mail_failed(state, now, retry_backoff);
+	return { ok: false, error: failure.summary, failure };
 };

@@ -5,7 +5,9 @@ import * as uci from 'uci';
 import * as uloop from 'uloop';
 import { normalize_global, normalize_smtp, normalize_monitor } from 'config';
 import { new_state, apply_result } from 'state';
-import { due_alert, mail_succeeded, mail_failed } from 'alerts';
+import {
+	due_alert, apply_alert_delivery_outcome, record_alert_failure
+} from 'alerts';
 import { start_diagnostics } from 'diagnostics';
 import { render_diagnostic_report } from 'diagnostics';
 import { collect_interface_inventory } from 'interfaces';
@@ -13,9 +15,8 @@ import { render_msmtp, render_message, split_recipients } from 'message';
 import {
 	prepare_delivery, finish_delivery, close_delivery, start_delivery_with
 } from 'mail_delivery';
-import { fixed_mail_failure, public_mail_failure } from 'mail_failure';
 import {
-	new_mail_test_tracker, begin_mail_test, finish_mail_test, start_mail_test
+	new_mail_test_tracker, start_mail_test, mail_test_error, mail_test_rejection
 } from 'mail_test';
 import { start_probe } from 'probe';
 import { service_methods } from 'rpc';
@@ -342,9 +343,10 @@ function render_alert(kind, monitor, state, timestamp, recipients, diagnostic) {
 	});
 };
 
-function alert_render_failed(state, now, error_text) {
-	mail_failed(state, now, global_config.mail_retry_backoff);
-	mail_error = error_text;
+function alert_render_failed(state, now, reason) {
+	let result = record_alert_failure(
+		state, now, global_config.mail_retry_backoff, reason);
+	mail_error = result.error;
 	persist_status();
 };
 
@@ -356,7 +358,7 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 	}
 	catch (error) {
 		state.mail_busy = false;
-		alert_render_failed(state, now, 'message rendering failed');
+		alert_render_failed(state, now, 'render');
 		return false;
 	}
 
@@ -376,16 +378,13 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 					state.incident_started == incident_started
 				: state.recovery_pending?.incident_started == incident_started;
 
-			if (same_incident && outcome?.ok === true) {
-				mail_succeeded(state, kind, time());
-				mail_error = null;
-				log.syslog('info', 'monitor %s %s mail delivered', monitor.id, kind);
-			}
-			else if (same_incident) {
-				let failure = public_mail_failure(outcome?.failure);
-				mail_failed(state, time(), global_config.mail_retry_backoff);
-				mail_error = failure?.summary ?? 'mail delivery failed';
-				log.syslog('err', 'monitor %s %s mail delivery failed', monitor.id, kind);
+			if (same_incident) {
+				let result = apply_alert_delivery_outcome(
+					state, kind, time(), global_config.mail_retry_backoff, outcome);
+				mail_error = result.error;
+				log.syslog(result.ok ? 'info' : 'err',
+					'monitor %s %s mail %s', monitor.id, kind,
+					result.ok ? 'delivered' : 'delivery failed');
 			}
 
 			persist_status();
@@ -397,9 +396,9 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 
 	if (!delivery_started) {
 		state.mail_busy = false;
-		mail_failed(state, now, global_config.mail_retry_backoff);
-		mail_error = fixed_mail_failure(
-			'spawn', 'Unable to start SMTP delivery.', '').summary;
+		let result = record_alert_failure(
+			state, now, global_config.mail_retry_backoff, 'spawn');
+		mail_error = result.error;
 		persist_status();
 		return false;
 	}
@@ -412,7 +411,7 @@ function start_alert(monitor, state, kind, now) {
 		return false;
 
 	if (!mail_config_ready) {
-		alert_render_failed(state, now, 'mail configuration invalid');
+		alert_render_failed(state, now, 'config');
 		return false;
 	}
 
@@ -616,28 +615,22 @@ function test_message(recipients, now) {
 	});
 };
 
-function reject_mail_test(stage, summary) {
-	let failure = fixed_mail_failure(stage, summary, '');
-
-	return { ok: false, error: failure.summary, failure };
-};
-
 function request_test_email(request) {
 	let message;
 	let started_at;
 
 	try {
 		if (shutting_down)
-			return reject_mail_test('process', 'service stopping');
+			return mail_test_rejection('stopping');
 
 		if (mail_work_active())
-			return reject_mail_test('process', 'mail delivery already running');
+			return mail_test_rejection('busy');
 
 		if (!load_configuration())
-			return reject_mail_test('config', 'configuration reload failed');
+			return mail_test_rejection('reload');
 
 		if (!mail_config_ready)
-			return reject_mail_test('config', 'mail configuration invalid');
+			return mail_test_rejection('config');
 
 		let recipient = request.args?.recipient;
 		let configured = type(recipient) == 'string' && recipient != ''
@@ -645,7 +638,7 @@ function request_test_email(request) {
 			: global_config.recipients;
 
 		if (configured == '')
-			return reject_mail_test('config', 'recipient is required');
+			return mail_test_rejection('recipient_required');
 
 		let recipients;
 
@@ -653,7 +646,7 @@ function request_test_email(request) {
 			recipients = split_recipients(configured);
 		}
 		catch (error) {
-			return reject_mail_test('config', 'recipient is invalid');
+			return mail_test_rejection('recipient_invalid');
 		}
 
 		started_at = time();
@@ -662,11 +655,11 @@ function request_test_email(request) {
 			message = test_message(recipients, started_at);
 		}
 		catch (error) {
-			return reject_mail_test('render', 'message rendering failed');
+			return mail_test_rejection('render');
 		}
 	}
 	catch (error) {
-		return reject_mail_test('process', 'test email failed');
+		return mail_test_rejection('generic');
 	}
 
 	return start_mail_test(
@@ -675,7 +668,7 @@ function request_test_email(request) {
 		(callback) => start_delivery(message, callback),
 		time,
 		(current) => {
-			mail_error = current.state == 'failed' ? current.error : null;
+			mail_error = mail_test_error(mail_error, current);
 			persist_status();
 		}
 	);

@@ -1,5 +1,8 @@
-import { equal } from 'test';
-import { due_alert, mail_succeeded, mail_failed } from 'alerts';
+import { deep_equal, equal } from 'test';
+import {
+	due_alert, mail_succeeded, mail_failed,
+	apply_alert_delivery_outcome, record_alert_failure
+} from 'alerts';
 import { new_state, apply_result } from 'state';
 
 function failed_state(started) {
@@ -76,6 +79,77 @@ equal(due_alert(retry, retry_monitor, 999), null,
 	'successful retry starts the repeat interval from actual delivery');
 equal(due_alert(retry, retry_monitor, 1000), 'failure',
 	'successful retry schedules the next permitted repeat normally');
+
+let routed_success = failed_state(1100);
+routed_success.next_mail_attempt = 1150;
+deep_equal(apply_alert_delivery_outcome(
+	routed_success, 'failure', 1200, 300,
+	{ ok: true, failure: null }
+), { ok: true, error: null, failure: null },
+	'structured alert success clears the global error result');
+equal(routed_success.failure_emails, 1,
+	'structured alert success reaches mail_succeeded exactly once');
+equal(routed_success.last_email, 1200,
+	'structured alert success records its actual delivery time');
+equal(routed_success.next_mail_attempt, null,
+	'structured alert success clears prior retry state');
+
+let routed_failure = failed_state(1300);
+deep_equal(apply_alert_delivery_outcome(
+	routed_failure, 'failure', 1350, 300,
+	{ ok: false, failure: {
+		stage: 'network', summary: 'SMTP network I/O failed.',
+		detail: 'network read timed out', exit_code: 74,
+		exit_name: 'attacker-controlled', smtp_status: null,
+		internal_secret: 'classified-secret'
+	} }
+), {
+	ok: false, error: 'SMTP network I/O failed.', failure: {
+		stage: 'network', summary: 'SMTP network I/O failed.',
+		detail: 'network read timed out', exit_code: 74,
+		exit_name: 'EX_IOERR', smtp_status: null
+	}
+}, 'structured alert failure returns only its classified public summary');
+equal(routed_failure.failure_emails, 0,
+	'structured alert failure does not consume alert allowance');
+equal(routed_failure.next_mail_attempt, 1650,
+	'structured alert failure reaches mail_failed retry scheduling');
+
+let render_failure = failed_state(1400);
+deep_equal(record_alert_failure(render_failure, 1450, 300, 'render'), {
+	ok: false, error: 'message rendering failed', failure: {
+		stage: 'render', summary: 'message rendering failed', detail: '',
+		exit_code: null, exit_name: null, smtp_status: null
+	}
+}, 'alert render failure uses the fixed render mapping');
+equal(render_failure.failure_emails, 0,
+	'alert render failure leaves the successful-email count unchanged');
+equal(render_failure.next_mail_attempt, 1750,
+	'alert render failure schedules bounded retry');
+
+let spawn_failure = failed_state(1500);
+deep_equal(record_alert_failure(spawn_failure, 1550, 300, 'spawn'), {
+	ok: false, error: 'Unable to start SMTP delivery.', failure: {
+		stage: 'spawn', summary: 'Unable to start SMTP delivery.', detail: '',
+		exit_code: null, exit_name: null, smtp_status: null
+	}
+}, 'alert start failure uses the fixed spawn mapping');
+equal(spawn_failure.failure_emails, 0,
+	'alert start failure leaves the successful-email count unchanged');
+equal(spawn_failure.next_mail_attempt, 1850,
+	'alert start failure schedules bounded retry');
+
+let configuration_failure = failed_state(1600);
+deep_equal(record_alert_failure(configuration_failure, 1650, 300, 'config'), {
+	ok: false, error: 'mail configuration invalid', failure: {
+		stage: 'config', summary: 'mail configuration invalid', detail: '',
+		exit_code: null, exit_name: null, smtp_status: null
+	}
+}, 'alert configuration failure uses the fixed config mapping');
+equal(configuration_failure.failure_emails, 0,
+	'alert configuration failure leaves the successful-email count unchanged');
+equal(configuration_failure.next_mail_attempt, 1950,
+	'alert configuration failure schedules bounded retry');
 
 let recovery = {
 	status: 'healthy', incident_started: null,

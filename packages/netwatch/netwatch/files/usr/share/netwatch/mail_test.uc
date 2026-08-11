@@ -1,7 +1,38 @@
 import { fixed_mail_failure, public_mail_failure } from 'mail_failure';
 
+const MAIL_TEST_REJECTIONS = {
+	stopping: [ 'process', 'service stopping' ],
+	busy: [ 'process', 'mail delivery already running' ],
+	reload: [ 'config', 'configuration reload failed' ],
+	config: [ 'config', 'mail configuration invalid' ],
+	recipient_required: [ 'config', 'recipient is required' ],
+	recipient_invalid: [ 'config', 'recipient is invalid' ],
+	render: [ 'render', 'message rendering failed' ],
+	spawn: [ 'spawn', 'Unable to start SMTP delivery.' ],
+	lifecycle: [ 'process', 'SMTP delivery process failed.' ],
+	generic: [ 'process', 'test email failed' ]
+};
+
 export function new_mail_test_tracker() {
 	return { next_id: 1, current: null };
+};
+
+export function mail_test_rejection(reason) {
+	let mapping = MAIL_TEST_REJECTIONS[reason] ?? MAIL_TEST_REJECTIONS.lifecycle;
+	let failure = fixed_mail_failure(mapping[0], mapping[1], '');
+
+	return { ok: false, error: failure.summary, failure };
+};
+
+export function mail_test_error(previous, current) {
+	if (current?.state == 'sent')
+		return null;
+	if (current?.state == 'failed')
+		return type(current.error) == 'string'
+			? current.error
+			: MAIL_TEST_REJECTIONS.lifecycle[1];
+
+	return previous;
 };
 
 export function begin_mail_test(tracker, now) {
@@ -53,20 +84,52 @@ export function start_mail_test(
 	tracker, now, start_delivery, completed_at, changed
 ) {
 	let current = begin_mail_test(tracker, now);
-	changed(public_mail_test(tracker));
 
-	let started = start_delivery((outcome) => {
-		if (finish_mail_test(tracker, current.id, outcome, completed_at()))
+	function completed() {
+		try {
+			return completed_at();
+		}
+		catch (error) {
+			return now;
+		}
+	};
+
+	function publish() {
+		try {
 			changed(public_mail_test(tracker));
-	});
+			return true;
+		}
+		catch (error) {
+			return false;
+		}
+	};
 
-	if (!started) {
-		let failure = fixed_mail_failure(
-			'spawn', 'Unable to start SMTP delivery.', '');
-		finish_mail_test(tracker, current.id, { ok: false, failure }, completed_at());
-		changed(public_mail_test(tracker));
-		return { ok: false, error: failure.summary, failure };
+	function reject_started(reason) {
+		let rejection = mail_test_rejection(reason);
+
+		if (finish_mail_test(tracker, current.id, rejection, completed()))
+			publish();
+
+		return rejection;
+	};
+
+	if (!publish())
+		return reject_started('lifecycle');
+
+	let started;
+
+	try {
+		started = start_delivery((outcome) => {
+			if (finish_mail_test(tracker, current.id, outcome, completed()))
+				publish();
+		});
 	}
+	catch (error) {
+		return reject_started('spawn');
+	}
+
+	if (!started)
+		return reject_started('spawn');
 
 	return { ok: true, id: current.id };
 };
