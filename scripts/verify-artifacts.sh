@@ -2,8 +2,8 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-runtime=outputs/netwatch_1.1.0-r2_all.apk
-luci=outputs/luci-app-netwatch_1.1.0-r2_all.apk
+runtime=outputs/netwatch_1.1.0-r3_all.apk
+luci=outputs/luci-app-netwatch_1.1.0-r3_all.apk
 scheduled=outputs/luci-app-scheduled-backup_1.0.0-r3_all.apk
 source_archive=outputs/openwrt-netwatch-1.1.0-source.tar.gz
 tmp=$(mktemp -d "$root/work/verify-artifacts.XXXXXX")
@@ -43,7 +43,7 @@ container_tmp=/src${tmp#"$root"}
 
 jq -e '
 	.info.name == "netwatch" and
-	.info.version == "1.1.0-r2" and
+	.info.version == "1.1.0-r3" and
 	.info.arch == "noarch" and
 	(.info.depends | sort == [
 		"ca-bundle", "libc", "msmtp", "ucode", "ucode-mod-fs",
@@ -54,7 +54,7 @@ jq -e '
 
 jq -e '
 	.info.name == "luci-app-netwatch" and
-	.info.version == "1.1.0-r2" and
+	.info.version == "1.1.0-r3" and
 	.info.arch == "noarch" and
 	(.info.depends | sort == [
 		"libc", "luci-base", "netwatch", "rpcd-mod-luci"
@@ -125,6 +125,8 @@ printf '%s\n' \
 	'usr/share/netwatch/diagnostics.uc' \
 	'usr/share/netwatch/interface_probe.uc' \
 	'usr/share/netwatch/interfaces.uc' \
+	'usr/share/netwatch/mail_delivery.uc' \
+	'usr/share/netwatch/mail_failure.uc' \
 	'usr/share/netwatch/mail_test.uc' \
 	'usr/share/netwatch/message.uc' \
 	'usr/share/netwatch/migrate.uc' \

@@ -95,7 +95,7 @@ for makefile in \
 	packages/netwatch/netwatch/Makefile \
 	packages/netwatch/luci-app-netwatch/Makefile
 do
-	for declaration in 'PKG_VERSION:=1.1.0' 'PKG_RELEASE:=2'; do
+	for declaration in 'PKG_VERSION:=1.1.0' 'PKG_RELEASE:=3'; do
 		if ! grep -Fq -- "$declaration" "$root/$makefile"; then
 			echo "missing package version declaration in $makefile: $declaration" >&2
 			fail=1
@@ -123,10 +123,10 @@ do
 done
 
 for expectation in \
-	'runtime=outputs/netwatch_1.1.0-r2_all.apk' \
-	'luci=outputs/luci-app-netwatch_1.1.0-r2_all.apk' \
+	'runtime=outputs/netwatch_1.1.0-r3_all.apk' \
+	'luci=outputs/luci-app-netwatch_1.1.0-r3_all.apk' \
 	'source_archive=outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
-	'.info.version == "1.1.0-r2"' \
+	'.info.version == "1.1.0-r3"' \
 	'openwrt-netwatch-1.1.0/README.md'
 do
 	if ! grep -Fq -- "$expectation" "$root/scripts/verify-artifacts.sh"; then
@@ -136,7 +136,7 @@ do
 done
 
 for module in \
-	alerts config diagnostics interface_probe interfaces mail_test message migrate \
+	alerts config diagnostics interface_probe interfaces mail_delivery mail_failure mail_test message migrate \
 	netwatchd ping probe result rpc secrets state store
 do
 	if ! grep -Fq -- "usr/share/netwatch/$module.uc" \
@@ -156,8 +156,8 @@ luci_manifest_count=$(awk '
 	luci && /^[[:space:]]*'\''[^'\'']+'\''/ { count++ }
 	luci && /luci-files\.expected/ { print count; exit }
 ' "$root/scripts/verify-artifacts.sh")
-if [ "$runtime_manifest_count" != 23 ] || [ "$luci_manifest_count" != 7 ]; then
-	echo "artifact manifest counts are not exactly 23 runtime and 7 LuCI paths: $runtime_manifest_count/$luci_manifest_count" >&2
+if [ "$runtime_manifest_count" != 25 ] || [ "$luci_manifest_count" != 7 ]; then
+	echo "artifact manifest counts are not exactly 25 runtime and 7 LuCI paths: $runtime_manifest_count/$luci_manifest_count" >&2
 	fail=1
 fi
 
@@ -184,10 +184,10 @@ if [ "$fail" -eq 0 ]; then
 	for text in \
 		'OpenWrt 25.12.5' \
 		'x86/64' \
-		'outputs/netwatch_1.1.0-r2_all.apk' \
-		'outputs/luci-app-netwatch_1.1.0-r2_all.apk' \
+		'outputs/netwatch_1.1.0-r3_all.apk' \
+		'outputs/luci-app-netwatch_1.1.0-r3_all.apk' \
 		'outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
-		'23 runtime manifest paths' \
+		'25 runtime manifest paths' \
 		'exactly seven LuCI manifest paths' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/keys/netwatch-local.pem' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/feed/x86_64/packages.adb' \
@@ -206,6 +206,10 @@ if [ "$fail" -eq 0 ]; then
 		"uci set netwatch.smtp.tls_insecure='1'" \
 		'Disable TLS certificate verification (insecure)' \
 		'bypass disables server-certificate authentication' \
+		'Show technical details' \
+		'mode `0600` and uniquely named' \
+		'reads at most 4096 bytes' \
+		'without `--debug`' \
 		'Active incidents and their email counters reset after a router reboot.' \
 		'/etc/init.d/netwatch restart' \
 		'ubus call netwatch status' \
@@ -237,12 +241,15 @@ const verification = section('Build verification', 'Install');
 const configure = section('Configure', 'Package feed maintenance');
 const errors = [];
 
-if (!build.includes('These are the published 1.1.0-r2 release outputs.') ||
-	!build.includes('The signed feed contains `netwatch-1.1.0-r2` and `luci-app-netwatch-1.1.0-r2`.'))
+if (!build.includes('These are the published 1.1.0-r3 release outputs.') ||
+	!build.includes('The signed feed contains `netwatch-1.1.0-r3` and `luci-app-netwatch-1.1.0-r3`.'))
 	errors.push('README must identify the published 1.1.0 outputs and signed feed versions');
 
-if (!verification.startsWith('## Build verification Release artifacts were built with the pinned OpenWrt 25.12.5 x86/64 SDK and verified with its apk-tools 3.0.5.'))
-	errors.push('README build verification must record the completed pinned-SDK build and artifact verification');
+if (!verification.startsWith('## Build verification Release artifacts must be built with the pinned OpenWrt 25.12.5 x86/64 SDK and verified with its apk-tools 3.0.5.'))
+	errors.push('README build verification must require pinned-SDK build and artifact verification');
+
+if (!configure.includes('The exact failure fields are stage, summary, detail, exit_code, exit_name, and smtp_status.'))
+	errors.push('README must document the exact public mail failure fields');
 
 if (!configure.includes('Every due interface failure email—initial, repeat, or retry when applicable—starts a fresh diagnostic collection. Diagnostic reports are not cached or persisted.') ||
 	!configure.includes('These email-only diagnostics are fresh, bounded, and redacted.'))

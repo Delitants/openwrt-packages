@@ -19,8 +19,8 @@ git --git-dir="$root/work/git-metadata" --work-tree="$root" \
 
 for path in \
 	keys/netwatch-local.pem \
-	feed/x86_64/netwatch-1.1.0-r2.apk \
-	feed/x86_64/luci-app-netwatch-1.1.0-r2.apk \
+	feed/x86_64/netwatch-1.1.0-r3.apk \
+	feed/x86_64/luci-app-netwatch-1.1.0-r3.apk \
 	feed/x86_64/luci-app-scheduled-backup-1.0.0-r3.apk
 do
 	[ -f "$root/$path" ] || {
@@ -31,8 +31,8 @@ done
 
 if find "$root/feed/x86_64" -maxdepth 1 -type f \
 	\( -name 'netwatch-*.apk' -o -name 'luci-app-netwatch-*.apk' \) \
-	! -name 'netwatch-1.1.0-r2.apk' \
-	! -name 'luci-app-netwatch-1.1.0-r2.apk' -print | grep -q .; then
+	! -name 'netwatch-1.1.0-r3.apk' \
+	! -name 'luci-app-netwatch-1.1.0-r3.apk' -print | grep -q .; then
 	echo 'obsolete Netwatch APK remains in feed' >&2
 	exit 1
 fi

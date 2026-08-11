@@ -8,8 +8,8 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir -p "$tmp/scripts" "$tmp/work/sdk/bin/packages/base"
 cp "$root/scripts/package-output.sh" "$tmp/scripts/package-output.sh"
 cp "$root/README.md" "$tmp/README.md"
-printf 'runtime apk fixture\n' > "$tmp/work/sdk/bin/packages/base/netwatch-1.1.0-r2.apk"
-printf 'luci apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-netwatch-1.1.0-r2.apk"
+printf 'runtime apk fixture\n' > "$tmp/work/sdk/bin/packages/base/netwatch-1.1.0-r3.apk"
+printf 'luci apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-netwatch-1.1.0-r3.apk"
 printf 'scheduled backup apk fixture\n' > \
 	"$tmp/work/sdk/bin/packages/base/luci-app-scheduled-backup-1.0.0-r3.apk"
 
@@ -33,8 +33,8 @@ git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
 
 archive=$tmp/outputs/openwrt-netwatch-1.1.0-source.tar.gz
 for artifact in \
-	netwatch_1.1.0-r2_all.apk \
-	luci-app-netwatch_1.1.0-r2_all.apk \
+	netwatch_1.1.0-r3_all.apk \
+	luci-app-netwatch_1.1.0-r3_all.apk \
 	luci-app-scheduled-backup_1.0.0-r3_all.apk \
 	openwrt-netwatch-1.1.0-source.tar.gz \
 	SHA256SUMS
@@ -46,8 +46,8 @@ do
 done
 
 for artifact in \
-	netwatch_1.1.0-r2_all.apk \
-	luci-app-netwatch_1.1.0-r2_all.apk \
+	netwatch_1.1.0-r3_all.apk \
+	luci-app-netwatch_1.1.0-r3_all.apk \
 	luci-app-scheduled-backup_1.0.0-r3_all.apk \
 	openwrt-netwatch-1.1.0-source.tar.gz
 do

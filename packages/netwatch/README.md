@@ -47,18 +47,18 @@ SHA-256
 The build script starts from a fresh package configuration so stale SDK-wide
 package selections cannot leak into the build. The packaging script publishes:
 
-- `outputs/netwatch_1.1.0-r2_all.apk`
-- `outputs/luci-app-netwatch_1.1.0-r2_all.apk`
+- `outputs/netwatch_1.1.0-r3_all.apk`
+- `outputs/luci-app-netwatch_1.1.0-r3_all.apk`
 - `outputs/luci-app-scheduled-backup_1.0.0-r3_all.apk`
 - `outputs/openwrt-netwatch-1.1.0-source.tar.gz`
 - `outputs/SHA256SUMS`
 
-These are the published 1.1.0-r2 release outputs. The signed feed contains
-`netwatch-1.1.0-r2` and `luci-app-netwatch-1.1.0-r2`.
+These are the published 1.1.0-r3 release outputs. The signed feed contains
+`netwatch-1.1.0-r3` and `luci-app-netwatch-1.1.0-r3`.
 
 ## Build verification
 
-Release artifacts were built with the pinned OpenWrt 25.12.5 x86/64 SDK and
+Release artifacts must be built with the pinned OpenWrt 25.12.5 x86/64 SDK and
 verified with its apk-tools 3.0.5. The exact replayable verification is:
 
 ```sh
@@ -74,6 +74,8 @@ verified with its apk-tools 3.0.5. The exact replayable verification is:
   tests/unit/store_test.uc \
   tests/unit/alerts_test.uc \
   tests/unit/message_test.uc \
+  tests/unit/mail_delivery_test.uc \
+  tests/unit/mail_failure_test.uc \
   tests/unit/mail_test_test.uc \
   tests/unit/rpc_test.uc \
   tests/unit/secrets_test.uc
@@ -89,19 +91,19 @@ For direct inspection of the two raw manifests, run:
 
 ```sh
 ./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
-  /src/outputs/netwatch_1.1.0-r2_all.apk | jq .info
+  /src/outputs/netwatch_1.1.0-r3_all.apk | jq .info
 ./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
-  /src/outputs/luci-app-netwatch_1.1.0-r2_all.apk | jq .info
+  /src/outputs/luci-app-netwatch_1.1.0-r3_all.apk | jq .info
 shasum -a 256 -c outputs/SHA256SUMS
 ```
 
-The source suite covers fourteen unit groups, stable package output generation,
+The source suite covers sixteen unit groups, stable package output generation,
 static/ucode checks, and artifact inspection. The artifact verifier requires
-two `1.1.0-r2` `noarch` manifests. The runtime manifest contains the CA bundle,
+two `1.1.0-r3` `noarch` manifests. The runtime manifest contains the CA bundle,
 `msmtp`, ucode, and all required ucode modules; the LuCI manifest contains
-`luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 23 runtime manifest paths
+`luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 25 runtime manifest paths
 and exactly seven LuCI manifest paths must match the expected lists. The
-runtime list includes 16 modules, two UCI config files, the init script, the
+runtime list includes 18 modules, two UCI config files, the init script, the
 upgrade activator, and three APK metadata paths. `/etc/config/netwatch` and the root-owned
 `/etc/config/netwatch-secrets` are protected `0600` conffiles, the init script
 is `0755`, and no packaged file may be group- or world-writable. The verifier
@@ -206,6 +208,24 @@ preserves an existing password when left empty, and offers an explicit control
 to clear it. The password is stored in the root-owned `netwatch-secrets` UCI
 package, which is excluded from the LuCI read ACL. The test-email action saves
 and applies the form before requesting a fixed test message.
+
+When a test email fails, LuCI keeps the red notification concise and puts the
+sanitized transport data behind the collapsed **Show technical details**
+disclosure. The exact failure fields are stage, summary, detail, exit_code,
+exit_name, and smtp_status. It reports the delivery category, a bounded
+technical reason, the local exit category, and a valid SMTP status
+when available. Summary and detail are separately bounded to 192 and 512
+bytes, respectively. The untrusted detail is redacted before it reaches status
+or LuCI: credentials, tokens, email addresses, private keys, control characters,
+and message content are not exposed.
+
+Normal msmtp stderr is captured without `--debug` in private stderr files under
+`/var/run/netwatch`, mode `0600` and uniquely named per delivery.
+Netwatch reads at most 4096 bytes, then closes and unlinks this private stderr
+file on success, failure, timeout, cancellation, shutdown, and setup errors.
+Only the bounded, sanitized failure object survives this lifecycle; raw stderr,
+the message body, generated SMTP configuration, passwords, RPC tokens, and
+signing material are never disclosed.
 
 Here is a ping monitor with packet-loss and average-delay limits:
 
