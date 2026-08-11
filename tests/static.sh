@@ -490,12 +490,15 @@ NODE
 		'const MSMTP_PROCESS_TIMEOUT_MS = 65000;' \
 		"uloop.process('/bin/sh'" \
 		"uloop.process('/bin/kill'" \
-		"import { prepare_delivery, finish_delivery, close_delivery } from 'mail_delivery';" \
+		'prepare_delivery, finish_delivery, close_delivery, start_delivery_with' \
 		'2> "$3" &' \
 		'resources.stderr_path' \
-		'finish_delivery(resources, exit_code, false)' \
-		'finish_delivery(resources, null, true)' \
-		'close_delivery(resources)' \
+		'start_delivery_with(message, callback, {' \
+		'spawn: (resources, finished) => uloop.process' \
+		'timer: (milliseconds, finished) => uloop.timer' \
+		'kill: kill_delivery_process' \
+		'settled: remove_active_delivery' \
+		'timeout_ms: MSMTP_PROCESS_TIMEOUT_MS' \
 		'const SHUTDOWN_TIMEOUT_MS = 5000;' \
 		'let active_deliveries = [];' \
 		'push(active_deliveries, context);' \
@@ -504,7 +507,6 @@ NODE
 		'scheduler.cancel();' \
 		'shutdown_timer.cancel();' \
 		'stop_active_delivery' \
-		'if (!shutting_down) callback(outcome);' \
 		'if (shutting_down && !length(active_deliveries))' \
 		'uloop.end()'
 	do

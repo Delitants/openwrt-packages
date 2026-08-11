@@ -10,7 +10,9 @@ import { start_diagnostics } from 'diagnostics';
 import { render_diagnostic_report } from 'diagnostics';
 import { collect_interface_inventory } from 'interfaces';
 import { render_msmtp, render_message, split_recipients } from 'message';
-import { prepare_delivery, finish_delivery, close_delivery } from 'mail_delivery';
+import {
+	prepare_delivery, finish_delivery, close_delivery, start_delivery_with
+} from 'mail_delivery';
 import {
 	new_mail_test_tracker, begin_mail_test, finish_mail_test, start_mail_test
 } from 'mail_test';
@@ -305,101 +307,24 @@ function start_delivery(message, callback) {
 	if (shutting_down)
 		return false;
 
-	let process_handle = null;
-	let timeout_handle = null;
-	let completed = false;
-	let cancelled = false;
-	let context = { stop: null };
-	let resources = prepare_delivery(message);
-
-	if (!resources)
-		return false;
-
-	function cancel_delivery_timeout() {
-		if (!timeout_handle)
-			return;
-
-		timeout_handle.cancel();
-		timeout_handle = null;
-	};
-
-	function finish(outcome) {
-		if (completed)
-			return;
-
-		completed = true;
-		cancel_delivery_timeout();
-		close_delivery(resources);
-		remove_active_delivery(context);
-
-		if (!shutting_down) callback(outcome);
-	};
-
-	context.stop = () => {
-		cancelled = true;
-		cancel_delivery_timeout();
-		close_delivery(resources);
-		kill_delivery_process(process_handle);
-	};
-
-	try {
-		process_handle = uloop.process('/bin/sh',
+	let context = start_delivery_with(message, callback, {
+		prepare: prepare_delivery,
+		finish: finish_delivery,
+		close: close_delivery,
+		spawn: (resources, finished) => uloop.process('/bin/sh',
 			['-c', MSMTP_COMMAND, 'netwatch-msmtp',
 				resources.message_path, resources.result_path,
-				resources.stderr_path], {},
-			(exit_code) => {
-				if (completed)
-					return;
+				resources.stderr_path], {}, finished),
+		timer: (milliseconds, finished) => uloop.timer(milliseconds, finished),
+		kill: kill_delivery_process,
+		settled: remove_active_delivery,
+		timeout_ms: MSMTP_PROCESS_TIMEOUT_MS
+	});
 
-				if (cancelled) {
-					finish(null);
-					return;
-				}
-
-				let outcome = finish_delivery(resources, exit_code, false);
-				finish(outcome);
-			}
-		);
-	}
-	catch (error) {
-		close_delivery(resources);
+	if (!context)
 		return false;
-	}
-
-	if (!process_handle) {
-		close_delivery(resources);
-		return false;
-	}
 
 	push(active_deliveries, context);
-
-	try {
-		timeout_handle = uloop.timer(MSMTP_PROCESS_TIMEOUT_MS, () => {
-			if (timeout_handle) {
-				timeout_handle.cancel();
-				timeout_handle = null;
-			}
-
-			kill_delivery_process(process_handle);
-			let outcome = finish_delivery(resources, null, true);
-			finish(outcome);
-		});
-	}
-	catch (error) {
-		completed = true;
-		kill_delivery_process(process_handle);
-		close_delivery(resources);
-		remove_active_delivery(context);
-		return false;
-	}
-
-	if (!timeout_handle) {
-		completed = true;
-		kill_delivery_process(process_handle);
-		close_delivery(resources);
-		remove_active_delivery(context);
-		return false;
-	}
 
 	return true;
 };
