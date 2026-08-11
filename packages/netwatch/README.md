@@ -53,7 +53,8 @@ package selections cannot leak into the build. The packaging script publishes:
 - `outputs/openwrt-netwatch-1.1.0-source.tar.gz`
 - `outputs/SHA256SUMS`
 
-These are the published 1.1.0-r3 release outputs. The signed feed contains
+The source tree is prepared for the 1.1.0-r3 release outputs. After a later
+build, signing, and feed publication, the signed feed will contain
 `netwatch-1.1.0-r3` and `luci-app-netwatch-1.1.0-r3`.
 
 ## Build verification

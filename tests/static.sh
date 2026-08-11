@@ -241,15 +241,31 @@ const verification = section('Build verification', 'Install');
 const configure = section('Configure', 'Package feed maintenance');
 const errors = [];
 
-if (!build.includes('These are the published 1.1.0-r3 release outputs.') ||
-	!build.includes('The signed feed contains `netwatch-1.1.0-r3` and `luci-app-netwatch-1.1.0-r3`.'))
-	errors.push('README must identify the published 1.1.0 outputs and signed feed versions');
+if (!build.includes('The source tree is prepared for the 1.1.0-r3 release outputs.') ||
+	!build.includes('After a later build, signing, and feed publication, the signed feed will contain `netwatch-1.1.0-r3` and `luci-app-netwatch-1.1.0-r3`.'))
+	errors.push('README must identify r3 as prepared but not yet published');
+
+if (build.includes('These are the published 1.1.0-r3 release outputs.') ||
+	build.includes('The signed feed contains `netwatch-1.1.0-r3` and `luci-app-netwatch-1.1.0-r3`.'))
+	errors.push('README must not claim that r3 outputs or feed artifacts are already published');
 
 if (!verification.startsWith('## Build verification Release artifacts must be built with the pinned OpenWrt 25.12.5 x86/64 SDK and verified with its apk-tools 3.0.5.'))
 	errors.push('README build verification must require pinned-SDK build and artifact verification');
 
 if (!configure.includes('The exact failure fields are stage, summary, detail, exit_code, exit_name, and smtp_status.'))
 	errors.push('README must document the exact public mail failure fields');
+
+if (!configure.includes('Summary and detail are separately bounded to 192 and 512 bytes, respectively.'))
+	errors.push('README must document the exact 192/512-byte public failure bounds');
+
+if (!configure.includes('credentials, tokens, email addresses, private keys, control characters, and message content are not exposed.'))
+	errors.push('README must document the mail-failure redaction boundary');
+
+if (!configure.includes('closes and unlinks this private stderr file on success, failure, timeout, cancellation, shutdown, and setup errors.'))
+	errors.push('README must document private stderr cleanup across every lifecycle outcome');
+
+if (!configure.includes('captured without `--debug`'))
+	errors.push('README must document that msmtp debug mode is never used');
 
 if (!configure.includes('Every due interface failure email—initial, repeat, or retry when applicable—starts a fresh diagnostic collection. Diagnostic reports are not cached or persisted.') ||
 	!configure.includes('These email-only diagnostics are fresh, bounded, and redacted.'))
