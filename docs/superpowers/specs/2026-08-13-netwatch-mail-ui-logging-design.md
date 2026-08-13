@@ -28,6 +28,15 @@ Only the matching terminal `sent` state produces the success notification.
 This distinction also prevents an automatic monitor alert triggered near a
 configuration apply from being mistaken for the requested test email.
 
+Every accepted button click must produce one distinct test-mail attempt. If the
+daemon is temporarily busy with an automatic alert immediately after Apply,
+LuCI will retain that click and retry the test RPC with a bounded delay until it
+receives its own `{ ok: true, id }`, rather than losing the request. It then
+waits only for that matching ID. A bounded busy timeout is reported explicitly
+as the reason the test was not sent. The in-flight guard prevents duplicate
+requests from double-clicks, and is always released after success, failure, or
+timeout so every subsequent click can initiate and deliver another test email.
+
 ## Global log verbosity
 
 Add `log_verbosity` to the global `netwatch.main` UCI section and Email page:
@@ -85,7 +94,8 @@ ucode, LuCI JavaScript, UCI upgrade, and existing r3 configuration compatibility
 ## Verification and release efficiency
 
 Use focused RED/GREEN tests for each behavior before implementation, including
-the real monitor modal-save promise, then run
+repeated sequential test clicks, temporary mail-worker contention, and the real
+monitor modal-save promise, then run
 the existing unit, LuCI, static, packaging, and in-SDK source/behavior gates.
 Inspect the live router only after source tests pass. Perform one final package
 build/sign/index/publication cycle, then upgrade and verify the router. Avoid
