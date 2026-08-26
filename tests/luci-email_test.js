@@ -104,6 +104,8 @@ function createHarness(options = {}) {
 
 		save() {
 			events.push('save');
+			if (options.saveError)
+				return Promise.reject(options.saveError);
 			const writes = [];
 			for (const section of this.sections)
 				for (const option of section.children)
@@ -153,6 +155,8 @@ function createHarness(options = {}) {
 		},
 		apply() {
 			events.push('apply');
+			if (options.applyError)
+				return Promise.reject(options.applyError);
 			return Promise.resolve();
 		}
 	};
@@ -290,6 +294,17 @@ function failedMailTest(failure) {
 		completed: 101,
 		error: failure.summary,
 		failure
+	};
+}
+
+function sentMailTest(id) {
+	return {
+		id,
+		state: 'sent',
+		started: 100,
+		completed: 101,
+		error: null,
+		failure: null
 	};
 }
 
@@ -444,6 +459,112 @@ test('a second click is ignored while the first test waits for its matching resu
 	assert.equal(notificationText(harness.notifications[0]), 'Test email sent successfully.');
 });
 
+test('temporary automatic-alert contention retains and retries the test click', async () => {
+	const busy = validFailure({
+		stage: 'process',
+		summary: 'mail delivery already running',
+		detail: '',
+		exit_code: null,
+		exit_name: null,
+		smtp_status: null
+	});
+	const harness = createHarness({
+		testEmailReplies: [
+			{ ok: false, error: busy.summary, failure: busy },
+			{ ok: true, id: 9 }
+		],
+		statusReplies: [ { version: 1, mail_test: sentMailTest(9), monitors: [] } ]
+	});
+
+	const completion = clickTestButton(harness);
+	await flushPromises();
+	assert.equal(harness.map.button.disabled, true);
+	assert.deepEqual(harness.rpcCalls.filter(call => call[0] === 'test_email'),
+		[ [ 'test_email', '' ] ], 'first busy request is recorded once');
+	assert.equal(harness.timers.length, 1, 'busy request schedules a bounded retry');
+	harness.runTimer();
+	await completion;
+	assert.deepEqual(harness.rpcCalls.filter(call => call[0] === 'test_email'), [
+		[ 'test_email', '' ], [ 'test_email', '' ]
+	]);
+	assert.equal(notificationText(harness.notifications[0]),
+		'Test email sent successfully.');
+	assert.equal(harness.map.button.disabled, false);
+});
+
+test('every sequential click starts and completes a distinct test email', async () => {
+	const harness = createHarness({
+		testEmailReplies: [ { ok: true, id: 7 }, { ok: true, id: 8 } ],
+		statusReplies: [
+			{ version: 1, mail_test: sentMailTest(7), monitors: [] },
+			{ version: 1, mail_test: sentMailTest(8), monitors: [] }
+		]
+	});
+
+	await clickTestButton(harness);
+	await clickTestButton(harness);
+	assert.deepEqual(harness.rpcCalls.filter(call => call[0] === 'test_email'), [
+		[ 'test_email', '' ], [ 'test_email', '' ]
+	]);
+	assert.deepEqual(harness.notifications.map(notificationText), [
+		'Test email sent successfully.', 'Test email sent successfully.'
+	]);
+	assert.equal(harness.map.button.disabled, false);
+});
+
+test('client-side failures always state a fixed safe reason in the banner', async () => {
+	for (const fixture of [
+		{
+			options: { saveError: new Error('save-password-secret') },
+			reason: 'configuration could not be saved'
+		},
+		{
+			options: { applyError: new Error('apply-password-secret') },
+			reason: 'configuration could not be applied'
+		},
+		{
+			options: { testEmailReplies: [ new Error('rpc-password-secret') ] },
+			reason: 'the router did not accept the test request'
+		},
+		{
+			options: { statusReplies: [ new Error('status-password-secret') ] },
+			reason: 'the delivery result could not be read'
+		}
+	]) {
+		const harness = createHarness(fixture.options);
+		await clickTestButton(harness);
+		assert.equal(notificationText(harness.notifications[0]),
+			`Test email could not be sent: ${fixture.reason}`);
+		assert.equal(JSON.stringify(harness.notifications).includes('password-secret'), false);
+		assert.equal(harness.map.button.disabled, false);
+	}
+});
+
+test('malformed test replies and bounded busy expiry state why no mail was sent', async () => {
+	const malformed = createHarness({
+		testEmailReplies: [ { ok: true, id: 'not-an-integer' } ]
+	});
+	await clickTestButton(malformed);
+	assert.equal(notificationText(malformed.notifications[0]),
+		'Test email could not be sent: the router returned an invalid test result');
+
+	const busyFailure = validFailure({
+		stage: 'process', summary: 'mail delivery already running', detail: '',
+		exit_code: null, exit_name: null, smtp_status: null
+	});
+	const busy = createHarness({
+		testEmailReplies: [ { ok: false, error: busyFailure.summary, failure: busyFailure } ]
+	});
+	const completion = clickTestButton(busy);
+	await flushPromises();
+	busy.setNow(70101);
+	busy.runTimer();
+	await completion;
+	assert.equal(notificationText(busy.notifications[0]),
+		'Test email could not be sent: SMTP delivery remained busy');
+	assert.equal(busy.map.button.disabled, false);
+});
+
 test('matching failed state renders a collapsed six-field disclosure from the terminal object', async () => {
 	const failure = validFailure();
 	const harness = createHarness({
@@ -525,7 +646,7 @@ test('extra or secret-bearing failure properties are never rendered', async () =
 
 	await clickTestButton(harness);
 	assert.equal(notificationText(harness.notifications[0]),
-		'Test email could not be sent. Check the configuration and system log.');
+		'Test email could not be sent: the router returned an invalid failure result');
 	for (const secret of [ 'smtp-password-secret', 'smtp-user-secret',
 		'ops@example.test', 'rpc-token-secret', 'untrusted-extra-value' ])
 		assert.equal(notificationText(harness.notifications[0]).includes(secret), false);
@@ -539,7 +660,7 @@ test('malformed failures retain the fixed local error', async () => {
 
 	await clickTestButton(harness);
 	assert.equal(notificationText(harness.notifications[0]),
-		'Test email could not be sent. Check the configuration and system log.');
+		'Test email could not be sent: the router returned an invalid failure result');
 });
 
 test('prototype property names are not accepted as failure stages', async () => {
@@ -551,7 +672,7 @@ test('prototype property names are not accepted as failure stages', async () => 
 
 		await clickTestButton(harness);
 		assert.equal(notificationText(harness.notifications[0]),
-			'Test email could not be sent. Check the configuration and system log.', stage);
+			'Test email could not be sent: the router returned an invalid failure result', stage);
 	}
 });
 
@@ -577,7 +698,7 @@ test('failure validator rejects invalid field types, ranges, and exit-name misma
 
 		await clickTestButton(harness);
 		assert.equal(notificationText(harness.notifications[0]),
-			'Test email could not be sent. Check the configuration and system log.');
+			'Test email could not be sent: the router returned an invalid failure result');
 	}
 });
 
@@ -609,7 +730,7 @@ test('numeric stage or exit name in an exact failure object retains the local fa
 
 		await clickTestButton(harness);
 		assert.equal(notificationText(harness.notifications[0]),
-			'Test email could not be sent. Check the configuration and system log.');
+			'Test email could not be sent: the router returned an invalid failure result');
 		for (const value of injectedValues)
 			assert.equal(notificationText(harness.notifications[0]).includes(value), false);
 		assert.equal(findElements(harness.notifications[0].content, 'img').length, 0);
@@ -642,7 +763,7 @@ test('multibyte UTF-8 boundaries permit only backend-bounded summary and detail 
 
 		await clickTestButton(harness);
 		assert.equal(notificationText(harness.notifications[0]),
-			'Test email could not be sent. Check the configuration and system log.');
+			'Test email could not be sent: the router returned an invalid failure result');
 	}
 });
 
@@ -662,7 +783,7 @@ test('polling has a bounded timeout and reports a fixed timeout notification', a
 	assert.equal(harness.map.button.disabled, false);
 	assert.equal(harness.timers.length, 0);
 	assert.equal(notificationText(harness.notifications[0]),
-		'Timed out waiting for the test email result. Check the system log.');
+		'Test email could not be sent: timed out waiting for the delivery result');
 });
 
 test('secret-bearing RPC failures retain the fixed local error', async () => {
@@ -672,7 +793,7 @@ test('secret-bearing RPC failures retain the fixed local error', async () => {
 	await clickTestButton(harness);
 	assert.equal(harness.notifications.length, 1);
 	assert.equal(notificationText(harness.notifications[0]),
-		'Test email could not be sent. Check the configuration and system log.');
+		'Test email could not be sent: the router did not accept the test request');
 	assert.equal(JSON.stringify(harness.notifications).includes('secret-bearing-exception'), false);
 });
 
@@ -688,7 +809,7 @@ test('status RPC rejection immediately retains the fixed local error', async () 
 	await completion;
 	assert.equal(harness.map.button.disabled, false);
 	assert.equal(notificationText(harness.notifications[0]),
-		'Test email could not be sent. Check the configuration and system log.');
+		'Test email could not be sent: the delivery result could not be read');
 	assert.equal(JSON.stringify(harness.notifications).includes('status-rpc-secret'), false);
 });
 

@@ -6,6 +6,7 @@
 'require ui';
 
 let testEmailInFlight = false;
+const TEST_REQUEST_BUSY_TIMEOUT_MS = 70000;
 
 const MAIL_FAILURE_FIELDS = [
 	'stage', 'summary', 'detail', 'exit_code', 'exit_name', 'smtp_status'
@@ -55,8 +56,16 @@ function delay(milliseconds) {
 	return new Promise(resolve => window.setTimeout(resolve, milliseconds));
 }
 
+function testMailError(reason) {
+	const error = new Error('netwatch test mail failed');
+	error.safeReason = reason;
+	return error;
+}
+
 function waitForMailTest(id, deadline) {
-	return callStatus().then(status => {
+	return callStatus().catch(() => {
+		throw testMailError(_('the delivery result could not be read'));
+	}).then(status => {
 		const test = status && status.mail_test;
 
 		if (test && test.id === id && (test.state === 'sent' || test.state === 'failed'))
@@ -65,6 +74,27 @@ function waitForMailTest(id, deadline) {
 			return 'timeout';
 
 		return delay(1000).then(() => waitForMailTest(id, deadline));
+	});
+}
+
+function isBusyFailure(result) {
+	const failure = validMailFailure(result && result.failure);
+
+	return result && result.ok === false && failure &&
+		failure.stage === 'process' &&
+		failure.summary === 'mail delivery already running';
+}
+
+function requestTestEmail(recipient, deadline) {
+	return callTestEmail(recipient).catch(() => {
+		throw testMailError(_('the router did not accept the test request'));
+	}).then(result => {
+		if (!isBusyFailure(result))
+			return result;
+		if (Date.now() >= deadline)
+			throw testMailError(_('SMTP delivery remained busy'));
+
+		return delay(1000).then(() => requestTestEmail(recipient, deadline));
 	});
 }
 
@@ -292,22 +322,27 @@ return view.extend({
 			testEmailInFlight = true;
 			setTestEmailBusy(m, true);
 
-			return m.save(null, true)
+			return m.save(null, true).catch(() => {
+				throw testMailError(_('configuration could not be saved'));
+			})
 				.then(() => {
 					setTestEmailBusy(m, true);
-					return uci.apply();
+					return uci.apply().catch(() => {
+						throw testMailError(_('configuration could not be applied'));
+					});
 				})
-				.then(() => callTestEmail(recipient))
+				.then(() => requestTestEmail(recipient,
+					Date.now() + TEST_REQUEST_BUSY_TIMEOUT_MS))
 				.then(result => {
 					if (result && result.ok === false) {
 						const failure = validMailFailure(result.failure);
 						if (!failure)
-							throw new Error('test failed');
+							throw testMailError(_('the router returned an invalid failure result'));
 
 						return { id: null, state: 'failed', failure };
 					}
 					if (!result || result.ok !== true || !Number.isInteger(result.id))
-						throw new Error('test failed');
+						throw testMailError(_('the router returned an invalid test result'));
 
 					return waitForMailTest(result.id, Date.now() + 70000);
 				})
@@ -317,15 +352,18 @@ return view.extend({
 					else if (test && test.state === 'failed') {
 						const failure = validMailFailure(test.failure);
 						if (!failure)
-							throw new Error('test failed');
+							throw testMailError(_('the router returned an invalid failure result'));
 
 						showMailTestFailure(test, failure);
 					}
 					else
-						ui.addNotification(null, E('p', _('Timed out waiting for the test email result. Check the system log.')), 'error');
+						throw testMailError(_('timed out waiting for the delivery result'));
 				})
-				.catch(() => {
-					ui.addNotification(null, E('p', _('Test email could not be sent. Check the configuration and system log.')), 'error');
+				.catch(error => {
+					const reason = error && typeof(error.safeReason) === 'string'
+						? error.safeReason : _('an unexpected client error occurred');
+					ui.addNotification(null, E('p',
+						_('Test email could not be sent: %s').format(reason)), 'error');
 				})
 				.finally(() => {
 					testEmailInFlight = false;

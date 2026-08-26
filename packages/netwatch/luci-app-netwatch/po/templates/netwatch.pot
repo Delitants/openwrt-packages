@@ -481,6 +481,10 @@ msgstr ""
 msgid "SMTP server"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:95
+msgid "SMTP delivery remained busy"
+msgstr ""
+
 #: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:125
 msgid "SMTP status"
 msgstr ""
@@ -597,8 +601,8 @@ msgstr ""
 msgid "Test email"
 msgstr ""
 
-#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:305
-msgid "Test email could not be sent. Check the configuration and system log."
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:344
+msgid "Test email could not be sent: %s"
 msgstr ""
 
 #: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:115
@@ -630,10 +634,6 @@ msgstr ""
 
 #: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js:98
 msgid "Timed out"
-msgstr ""
-
-#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:302
-msgid "Timed out waiting for the test email result. Check the system log."
 msgstr ""
 
 #: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:205
@@ -678,4 +678,37 @@ msgstr ""
 #: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:100
 #: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:101
 msgid "none"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:364
+msgid "an unexpected client error occurred"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:331
+msgid "configuration could not be applied"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:326
+msgid "configuration could not be saved"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:67
+msgid "the delivery result could not be read"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:90
+msgid "the router did not accept the test request"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:340
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:355
+msgid "the router returned an invalid failure result"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:345
+msgid "the router returned an invalid test result"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:360
+msgid "timed out waiting for the delivery result"
 msgstr ""
