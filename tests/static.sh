@@ -1165,7 +1165,7 @@ NODE
 	' "$monitors" || fail=1
 
 	for declaration in \
-		"form.GridSection, 'monitor'" \
+		"MonitorGridSection, 'monitor'" \
 		's.anonymous = false;' \
 		's.addremove = true;' \
 		"object: 'luci-rpc', method: 'getDHCPLeases', expect: { '': {} }" \

@@ -245,6 +245,14 @@ msgstr ""
 msgid "Host unreachable"
 msgstr ""
 
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:128
+msgid "ID"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:138
+msgid "Identifier"
+msgstr ""
+
 #: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js:255
 msgid "Immediately"
 msgstr ""

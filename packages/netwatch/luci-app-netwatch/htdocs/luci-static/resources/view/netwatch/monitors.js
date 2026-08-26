@@ -118,6 +118,29 @@ const GroupedInterfaceValue = form.ListValue.extend({
 	}
 });
 
+const MonitorGridSection = form.GridSection.extend({
+	renderHeaderRows(hasAction) {
+		const rows = this.super('renderHeaderRows', arguments);
+		const heading = rows.querySelector(
+			'tr.cbi-section-table-titles.named > th:first-child');
+
+		if (heading)
+			heading.textContent = _('ID');
+
+		return rows;
+	},
+
+	renderSectionAdd(extraClass) {
+		const section = this.super('renderSectionAdd', arguments);
+		const identifier = section.querySelector('input.cbi-section-create-name');
+
+		if (identifier)
+			identifier.placeholder = _('Identifier');
+
+		return section;
+	}
+});
+
 return view.extend({
 	load() {
 		return Promise.all([
@@ -137,7 +160,7 @@ return view.extend({
 		const inventoryErrors = data[2] && Array.isArray(data[2].errors) ? data[2].errors : [];
 		const m = new form.Map('netwatch', _('Netwatch monitors'),
 			_('Monitor hosts, TCP services, OpenWrt networks, Linux devices, Wi-Fi radios, and APs.'));
-		const s = m.section(form.GridSection, 'monitor', _('Monitors'));
+		const s = m.section(MonitorGridSection, 'monitor', _('Monitors'));
 		let o;
 
 		s.anonymous = false;
@@ -170,6 +193,7 @@ return view.extend({
 		target.depends('type', 'tcp');
 
 	o = s.option(form.DummyValue, '_display_target', _('Target'));
+	o.modalonly = false;
 	o.parse = function() { return Promise.resolve(); };
 	o.write = function() {};
 	o.remove = function() {};

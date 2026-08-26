@@ -98,17 +98,43 @@ function createHarness() {
 	}
 
 	class Section {
-		constructor(map, type, name) {
+		constructor(map, type, name, definition) {
 			this.map = map;
 			this.type = type;
 			this.name = name;
 			this.children = [];
+			this.baseHeader = { textContent: 'Name' };
+			this.baseIdentifier = { placeholder: '' };
+
+			if (definition)
+				Object.assign(this, definition);
 		}
 
 		option(type, name, title, description) {
 			const option = new Option(this, type, name, title, description);
 			this.children.push(option);
 			return option;
+		}
+
+		super(method) {
+			if (method === 'renderHeaderRows')
+				return {
+					querySelector: selector => selector.includes('th') ? this.baseHeader : null
+				};
+			if (method === 'renderSectionAdd')
+				return {
+					querySelector: selector => selector.includes('cbi-section-create-name')
+						? this.baseIdentifier : null
+				};
+			throw new Error(`unexpected super method: ${method}`);
+		}
+
+		renderHeaderRows() {
+			return this.super('renderHeaderRows');
+		}
+
+		renderSectionAdd() {
+			return this.super('renderSectionAdd');
 		}
 	}
 
@@ -119,7 +145,7 @@ function createHarness() {
 		}
 
 		section(type, name) {
-			const section = new Section(this, type, name);
+			const section = new Section(this, type, name, type && type.definition);
 			this.sections.push(section);
 			return section;
 		}
@@ -139,9 +165,14 @@ function createHarness() {
 	}
 
 	const DummyValue = Symbol('DummyValue');
+	const GridSection = {
+		extend(definition) {
+			return { definition };
+		}
+	};
 	const form = {
 		Map,
-		GridSection: Symbol('GridSection'),
+		GridSection,
 		Flag: Symbol('Flag'),
 		Value: Symbol('Value'),
 		ListValue: {
@@ -191,6 +222,7 @@ function createHarness() {
 		definition,
 		DummyValue,
 		map() { return currentMap; },
+		section() { return currentMap.sections[0]; },
 		option(name) {
 			for (const section of currentMap.sections)
 				for (const option of section.children)
@@ -219,6 +251,8 @@ function createHarness() {
 	assert.ok(display, 'grid has a display-only target column');
 	assert.equal(display.type, harness.DummyValue, 'target display uses LuCI DummyValue');
 	assert.equal(display.title, 'Target');
+	assert.equal(display.modalonly, false,
+		'display-only target must remain in the table and stay out of the modal');
 	assert.equal(typeof(display.parse), 'function', 'display-only target has a no-op parser');
 	assert.equal(typeof(display.write), 'function', 'display-only target has a safe no-op writer');
 	assert.equal(typeof(display.remove), 'function', 'display-only target has a safe no-op remover');
@@ -226,6 +260,14 @@ function createHarness() {
 		'AP: Helium+🎈 — radio1 / default_radio1 (disabled)');
 	assert.equal(display.textvalue('ping'), '192.168.4.108');
 	assert.equal(display.textvalue('missing'), 'Missing: wifi-iface:gone');
+
+	const section = harness.section();
+	section.renderHeaderRows(false);
+	assert.equal(section.baseHeader.textContent, 'ID',
+		'grid section identifier column is labelled ID instead of Name');
+	section.renderSectionAdd('cbi-tblsection-create');
+	assert.equal(section.baseIdentifier.placeholder, 'Identifier',
+		'add-monitor identifier input has an explicit placeholder');
 
 	await assert.doesNotReject(harness.saveModal('Test3', {
 		name: 'Renamed AP monitor',
