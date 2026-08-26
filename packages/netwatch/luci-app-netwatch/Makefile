@@ -1,6 +1,6 @@
 include $(TOPDIR)/rules.mk
 PKG_VERSION:=1.1.0
-PKG_RELEASE:=3
+PKG_RELEASE:=4
 LUCI_TITLE:=LuCI support for Netwatch host, TCP service, and interface monitoring
 LUCI_DEPENDS:=+luci-base +rpcd-mod-luci +netwatch
 LUCI_PKGARCH:=all

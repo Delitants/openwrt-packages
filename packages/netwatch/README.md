@@ -47,15 +47,15 @@ SHA-256
 The build script starts from a fresh package configuration so stale SDK-wide
 package selections cannot leak into the build. The packaging script publishes:
 
-- `outputs/netwatch_1.1.0-r3_all.apk`
-- `outputs/luci-app-netwatch_1.1.0-r3_all.apk`
+- `outputs/netwatch_1.1.0-r4_all.apk`
+- `outputs/luci-app-netwatch_1.1.0-r4_all.apk`
 - `outputs/luci-app-scheduled-backup_1.0.0-r3_all.apk`
 - `outputs/openwrt-netwatch-1.1.0-source.tar.gz`
 - `outputs/SHA256SUMS`
 
-The 1.1.0-r3 release artifacts use the stable output names above. The signed
-repository feed for this release contains `netwatch-1.1.0-r3` and
-`luci-app-netwatch-1.1.0-r3`. This source document does not attest to
+The 1.1.0-r4 release artifacts use the stable output names above. The signed
+repository feed for this release contains `netwatch-1.1.0-r4` and
+`luci-app-netwatch-1.1.0-r4`. This source document does not attest to
 public-byte equality or live-router verification.
 
 ## Build verification
@@ -93,15 +93,15 @@ For direct inspection of the two raw manifests, run:
 
 ```sh
 ./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
-  /src/outputs/netwatch_1.1.0-r3_all.apk | jq .info
+  /src/outputs/netwatch_1.1.0-r4_all.apk | jq .info
 ./scripts/in-sdk.sh /sdk/staging_dir/host/bin/apk adbdump --format json \
-  /src/outputs/luci-app-netwatch_1.1.0-r3_all.apk | jq .info
+  /src/outputs/luci-app-netwatch_1.1.0-r4_all.apk | jq .info
 shasum -a 256 -c outputs/SHA256SUMS
 ```
 
 The source suite covers sixteen unit groups, stable package output generation,
 static/ucode checks, and artifact inspection. The artifact verifier requires
-two `1.1.0-r3` `noarch` manifests. The runtime manifest contains the CA bundle,
+two `1.1.0-r4` `noarch` manifests. The runtime manifest contains the CA bundle,
 `msmtp`, ucode, and all required ucode modules; the LuCI manifest contains
 `luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 26 runtime manifest paths
 and exactly seven LuCI manifest paths must match the expected lists. The
