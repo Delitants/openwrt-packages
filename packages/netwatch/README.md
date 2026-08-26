@@ -180,6 +180,11 @@ uci commit netwatch-secrets
 /etc/init.d/netwatch restart
 ```
 
+The same page controls global system-log verbosity. `errors` records failures
+only, `normal` (the default) adds lifecycle events and state transitions, and
+`verbose` also records every probe result and diagnostic collection step. The
+equivalent setting is `uci set netwatch.main.log_verbosity='normal'`.
+
 For port 465 with implicit TLS, keep the other SMTP values and change:
 
 ```sh
@@ -307,11 +312,16 @@ silently cleared.
 Every due interface failure email—initial, repeat, or retry when
 applicable—starts a fresh diagnostic collection. Diagnostic reports are not
 cached or persisted. These email-only diagnostics are fresh, bounded, and
-redacted. Collection uses a new interface snapshot and fixed command templates,
+redacted. Identity, configured state, observed state, kernel facts, and useful
+evidence are rendered as ordered plain-text scalar lines; raw JSON, null values,
+internal source flags, duplicate wrapper fields, empty log sections, and command
+help/usage dumps are omitted. Collection uses a new interface snapshot and fixed
+command templates,
 allows 15 seconds, reads at most 256 KiB from a command, keeps at most 200 recent
 relevant log lines, caps each report section at 16 KiB and the whole report at
 64 KiB, and redacts common secret and credential forms. Missing sources or
-utilities, including `iwinfo`, mark the report incomplete but do not block
+utilities, including an unavailable or unsupported `iwinfo`, produce one concise
+collection reason and mark the report incomplete but do not block
 delivery of the failure email. Full diagnostics are not exposed by the status
 API or LuCI.
 

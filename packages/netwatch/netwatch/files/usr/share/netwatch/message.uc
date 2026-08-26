@@ -281,7 +281,7 @@ function safe_body_block(value, field) {
 	return value;
 };
 
-function interface_identity_lines(result, evidence_json) {
+function interface_identity_lines(result) {
 	if (type(result) != 'object') die('interface result is required');
 	let lines = [
 		`Interface: ${safe_text(result.label ?? result.configured_name, 'interface label', false)}`,
@@ -292,8 +292,6 @@ function interface_identity_lines(result, evidence_json) {
 		push(lines, `Live device: ${safe_text(result.live_device, 'live device', false)}`);
 	if (type(result.summary) == 'string' && result.summary != '')
 		push(lines, `Summary: ${safe_text(result.summary, 'interface summary', false)}`);
-	if (type(result.evidence) == 'object')
-		push(lines, `Evidence: ${evidence_json}`);
 	return lines;
 };
 
@@ -345,7 +343,7 @@ export function render_message(kind, context) {
 			subject = `[Netwatch DOWN][${hostname}] ${name} — ${label}`;
 			body = [
 				`Monitor: ${name}`,
-				...interface_identity_lines(result, compacted.evidence_json),
+				...interface_identity_lines(result),
 				`Reason: ${safe_text(result.reason, 'failure reason', false)}`,
 				`Last check: ${rfc5322_date(integer(state.last_check, 'last check'))}`,
 				`Incident time: ${rfc5322_date(incident)}`,
@@ -354,6 +352,8 @@ export function render_message(kind, context) {
 			];
 			if (type(context.diagnostic) == 'object' &&
 				type(context.diagnostic.text) == 'string') {
+				push(body, '');
+				push(body, 'Diagnostics:');
 				push(body, '');
 				push(body, safe_body_block(context.diagnostic.text, 'diagnostic report'));
 			}
@@ -389,7 +389,7 @@ export function render_message(kind, context) {
 			subject = `[Netwatch RECOVERED][${hostname}] ${name} — ${label}`;
 			body = [
 				`Monitor: ${name}`,
-				...interface_identity_lines(recovered, compacted.evidence_json),
+				...interface_identity_lines(recovered),
 				`Recovered state: ${safe_text(recovered.summary, 'recovery summary', false)}`,
 				`Incident time: ${rfc5322_date(incident)}`,
 				`Recovered at: ${rfc5322_date(recovered_at)}`,

@@ -257,7 +257,9 @@ let interface_context = {
 		}
 	},
 	diagnostic: {
-		text: '## Recent relevant logs\nnetifd: radio0 setup failed\n',
+		text: 'Interface identity and observed state:\n' +
+			'Radio: radio0\nLive AP present: no\n\n' +
+			'Recent relevant logs:\nnetifd: radio0 setup failed\n',
 		incomplete: false, errors: [], truncated: false
 	}
 };
@@ -272,6 +274,17 @@ truthy(match(interface_failure, /Summary: wireless AP is not running/), 'summary
 truthy(match(interface_failure, /Last check: Tue, 14 Nov 2023 22:14:20 \+0000/),
 	'last check time rendered');
 truthy(match(interface_failure, /netifd: radio0 setup failed/), 'diagnostic report rendered');
+equal(length(split(interface_failure, '\nDiagnostics:\n')), 2,
+	'failure email contains exactly one diagnostics separator');
+truthy(match(interface_failure,
+	/Alert 2 of 4\n\nDiagnostics:\n\nInterface identity and observed state:/),
+	'compact incident summary precedes readable diagnostics');
+equal(match(interface_failure, /(^|\n)## /), null,
+	'plain-text email contains no Markdown headings');
+equal(match(interface_failure, /Usage:|iwinfo <device>/), null,
+	'plain-text email contains no command help dump');
+equal(match(interface_failure, /Evidence:|[{}]/), null,
+	'plain-text email contains no raw evidence JSON');
 
 let interface_recovery = render_message('recovery', {
 	...interface_context,
@@ -293,6 +306,8 @@ truthy(match(interface_recovery, /Recovered state: wireless AP is running/),
 	'fresh recovery snapshot rendered');
 equal(match(interface_recovery, /Recent relevant logs/), null,
 	'failure diagnostics omitted from recovery');
+equal(match(interface_recovery, /Diagnostics:/), null,
+	'recovery email has no diagnostic block');
 
 let tainted_message_result = {
 	...interface_context.state.last_result,
@@ -318,9 +333,8 @@ for (let secret in [
 ])
 	equal(length(split(tainted_failure_message, secret)), 1,
 		`${secret} absent from failure mail`);
-truthy(length(split(tainted_failure_message,
-	'Evidence: { "radio": "radio0", "present": false }')) == 2,
-	'allowed evidence remains in failure mail');
+equal(match(tainted_failure_message, /Evidence:|[{}]/), null,
+	'allowed evidence is not serialized as raw JSON in failure mail');
 
 let tainted_recovery_message = render_message('recovery', {
 	...interface_context,

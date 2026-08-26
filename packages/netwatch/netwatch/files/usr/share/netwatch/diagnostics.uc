@@ -148,7 +148,7 @@ export function render_diagnostic_report(sections, errors) {
 	let safe_errors = normalized_errors(errors);
 	let truncated = safe_errors.truncated;
 	if (length(safe_errors.values))
-		push(chunks, '## Diagnostic collection incomplete\n' +
+		push(chunks, 'Diagnostic collection incomplete:\n' +
 			join('\n', map(safe_errors.values, error => `- ${error}`)));
 
 	for (let section in sections ?? []) {
@@ -158,13 +158,16 @@ export function render_diagnostic_report(sections, errors) {
 		let limited = truncate_text(redact_diagnostic_text(value.text), SECTION_LIMIT,
 			'\n[section truncated]\n');
 		truncated = truncated || value.truncated || limited.truncated;
+		if (trim(limited.text) == '')
+			continue;
 		let title = truncate_text(redact_diagnostic_text(section?.title ?? 'Diagnostic'),
 			256, ' [truncated]');
 		truncated = truncated || title.truncated;
-		push(chunks, `## ${title.text}\n${limited.text}`);
+		push(chunks, `${title.text}:\n${limited.text}`);
 	}
 
-	let total = truncate_text(join('\n\n', chunks) + '\n', REPORT_LIMIT,
+	let report = length(chunks) ? join('\n\n', chunks) + '\n' : '';
+	let total = truncate_text(report, REPORT_LIMIT,
 		'\n[report truncated]\n');
 	return {
 		text: total.text,
@@ -287,6 +290,122 @@ function selected_state(snapshot, parsed, result) {
 	return output;
 };
 
+function fact_value(value) {
+	if (type(value) == 'bool')
+		return value ? 'yes' : 'no';
+	if (type(value) in [ 'string', 'int', 'double' ]) {
+		let text = trim(replace(clean_text(value), /\n+/g, ' '));
+		return text != '' ? text : null;
+	}
+	return null;
+};
+
+function add_fact(lines, label, value) {
+	value = fact_value(value);
+	if (value != null)
+		push(lines, `${label}: ${value}`);
+};
+
+export function render_interface_facts(snapshot, parsed, result, collected_at) {
+	let selected = selected_state(snapshot, parsed, result);
+	let lines = [];
+	add_fact(lines, 'Selector', selected.selector);
+	add_fact(lines, 'Interface', result?.label ?? result?.configured_name);
+	add_fact(lines, 'Reason', result?.summary ?? result?.reason);
+	add_fact(lines, 'Live device', result?.live_device);
+
+	if (parsed.kind == 'network') {
+		add_fact(lines, 'Configured device', selected.configured?.device ??
+			selected.configured?.ifname);
+		add_fact(lines, 'Protocol', selected.configured?.proto ?? selected.runtime?.proto);
+		add_fact(lines, 'Configured disabled', selected.configured?.disabled);
+		add_fact(lines, 'Interface up', selected.runtime?.up ?? result?.evidence?.up);
+		add_fact(lines, 'Interface available', selected.runtime?.available ??
+			result?.evidence?.available);
+	}
+	else if (parsed.kind == 'device') {
+		add_fact(lines, 'Device type', selected.configured?.type ?? selected.runtime?.type);
+		add_fact(lines, 'Configured disabled', selected.configured?.disabled);
+		add_fact(lines, 'Present', selected.runtime?.present ?? result?.evidence?.present);
+		add_fact(lines, 'Link up', selected.runtime?.up ?? result?.evidence?.up);
+		add_fact(lines, 'Carrier', selected.runtime?.carrier ?? result?.evidence?.carrier);
+		add_fact(lines, 'Operstate', selected.runtime?.operstate ??
+			result?.evidence?.operstate);
+	}
+	else if (parsed.kind == 'wifi-radio') {
+		add_fact(lines, 'Radio', parsed.id);
+		add_fact(lines, 'Band', selected.configured?.band);
+		add_fact(lines, 'Channel', selected.configured?.channel);
+		add_fact(lines, 'Country', selected.configured?.country);
+		add_fact(lines, 'Configured disabled', selected.configured?.disabled);
+		add_fact(lines, 'Radio up', selected.runtime?.up ?? result?.evidence?.up);
+		add_fact(lines, 'Setup pending', selected.runtime?.pending ??
+			result?.evidence?.pending);
+		add_fact(lines, 'Retry setup failed', selected.runtime?.retry_setup_failed ??
+			result?.evidence?.retry_setup_failed);
+	}
+	else if (parsed.kind == 'wifi-iface') {
+		add_fact(lines, 'Radio', selected.configured?.device ?? result?.evidence?.radio);
+		add_fact(lines, 'SSID', selected.configured?.ssid ?? result?.evidence?.ssid);
+		add_fact(lines, 'Configured disabled', selected.configured?.disabled);
+		add_fact(lines, 'Radio up', selected.radio?.up ?? result?.evidence?.radio_up);
+		add_fact(lines, 'Live AP present', result?.evidence?.live_present ??
+			(type(selected.runtime) == 'object'));
+		add_fact(lines, 'Live interface', selected.runtime?.ifname ??
+			result?.evidence?.ifname);
+	}
+
+	add_fact(lines, 'Collected at', collected_at);
+	return join('\n', lines);
+};
+
+function render_kernel_facts(values) {
+	let lines = [];
+	for (let field in [
+		[ 'operstate', 'Operstate' ],
+		[ 'carrier', 'Carrier' ],
+		[ 'mtu', 'MTU' ],
+		[ 'address', 'MAC address' ],
+		[ 'statistics/rx_bytes', 'RX bytes' ],
+		[ 'statistics/rx_packets', 'RX packets' ],
+		[ 'statistics/rx_errors', 'RX errors' ],
+		[ 'statistics/tx_bytes', 'TX bytes' ],
+		[ 'statistics/tx_packets', 'TX packets' ],
+		[ 'statistics/tx_errors', 'TX errors' ],
+		[ 'driver', 'Driver' ]
+	])
+		add_fact(lines, field[1], values?.[field[0]]);
+	return join('\n', lines);
+};
+
+export function useful_command_output(name, value) {
+	let raw = type(value) == 'object' ? value?.text : value;
+	let text = type(raw) == 'string' ? clean_text(raw) : '';
+	let ok = type(value) != 'object' || value?.ok !== false;
+
+	if (trim(text) == '')
+		return { text: '', useful: false, reason: null };
+
+	if (name == 'iwinfo' && !ok) {
+		let total = 0;
+		let usage = 0;
+		for (let line in split(text, '\n')) {
+			line = trim(line);
+			if (line == '') continue;
+			total++;
+			if (match(line, /^Usage:/i) || match(line, /^iwinfo[ \t]+<device>/i))
+				usage++;
+		}
+		if (total && usage * 3 >= total * 2)
+			return {
+				text: '', useful: false,
+				reason: 'wireless status command unsupported for selected interface'
+			};
+	}
+
+	return { text, useful: true, reason: null };
+};
+
 function dependency_value(fn, fallback, errors, reason) {
 	try { return type(fn) == 'function' ? fn() : fallback; }
 	catch (error) { push(errors, reason); return fallback; }
@@ -301,10 +420,9 @@ function command_value(deps, name, command, errors, reason) {
 		return null;
 	}
 	if (type(value) == 'object') {
-		if (value.ok === false) push(errors, reason);
-		return value.text ?? '';
+		return { text: value.text ?? '', ok: value.ok !== false };
 	}
-	return value;
+	return { text: value, ok: true };
 };
 
 export function collect_diagnostics_with(monitor, result, deps) {
@@ -323,12 +441,11 @@ export function collect_diagnostics_with(monitor, result, deps) {
 	}
 	for (let error in snapshot?.errors ?? []) push(errors, error);
 
-	let selected = selected_state(snapshot, parsed, result);
-	selected.collected_at = dependency_value(deps?.clock, null, errors,
+	let collected_at = dependency_value(deps?.clock, null, errors,
 		'collection time unavailable');
 	push(sections, {
 		title: 'Interface identity and observed state',
-		text: sprintf('%J', selected)
+		text: render_interface_facts(snapshot, parsed, result, collected_at)
 	});
 
 	let device = result?.live_device ?? (parsed.kind == 'device' ? parsed.id : null);
@@ -353,13 +470,17 @@ export function collect_diagnostics_with(monitor, result, deps) {
 		catch (error) { sysfs_failed = true; }
 		if (driver) sysfs.driver = driver;
 		if (sysfs_failed) push(errors, 'kernel interface facts incomplete');
-		push(sections, { title: 'Kernel interface facts', text: sprintf('%J', sysfs) });
+		push(sections, { title: 'Kernel interface facts', text: render_kernel_facts(sysfs) });
 
 		let link = command_value(deps, 'link',
 			`/sbin/ip -details address show dev '${device}' 2>&1`, errors,
 			'link details unavailable');
-		if (link != null)
-			push(sections, { title: 'Address and link details', text: link });
+		if (link != null) {
+			let useful = useful_command_output('link', link);
+			if (!link.ok) push(errors, 'link details unavailable');
+			if (useful.useful)
+				push(sections, { title: 'Address and link details', text: useful.text });
+		}
 	}
 
 	if (parsed.kind in [ 'wifi-radio', 'wifi-iface' ]) {
@@ -367,16 +488,24 @@ export function collect_diagnostics_with(monitor, result, deps) {
 		let iwinfo = command_value(deps, 'iwinfo',
 			`/usr/bin/iwinfo '${iw_target}' info 2>&1`, errors,
 			'iwinfo unavailable');
-		if (iwinfo != null)
-			push(sections, { title: 'Wireless status', text: iwinfo });
+		if (iwinfo != null) {
+			let useful = useful_command_output('iwinfo', iwinfo);
+			if (useful.reason != null) push(errors, useful.reason);
+			else if (!iwinfo.ok) push(errors, 'iwinfo unavailable');
+			if (useful.useful)
+				push(sections, { title: 'Wireless status', text: useful.text });
+		}
 	}
 
 	let log_text = command_value(deps, 'logread', '/sbin/logread 2>&1', errors,
 		'system log unavailable');
 	if (log_text != null) {
-		let filtered = relevant_logs(log_text,
+		if (!log_text.ok) push(errors, 'system log unavailable');
+		let filtered = relevant_logs(log_text.text,
 			diagnostic_tokens(snapshot, parsed, result));
-		push(sections, { title: 'Recent relevant logs', text: filtered, log: true });
+		let useful = useful_command_output('logread', { text: filtered, ok: log_text.ok });
+		if (useful.useful)
+			push(sections, { title: 'Recent relevant logs', text: useful.text, log: true });
 	}
 
 	return render_diagnostic_report(sections, errors);

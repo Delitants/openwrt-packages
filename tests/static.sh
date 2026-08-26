@@ -1021,13 +1021,30 @@ NODE
 	for declaration in \
 		"link: '/sbin/ip'" \
 		"iwinfo: '/usr/bin/iwinfo'" \
-		"logread: '/sbin/logread'"
+		"logread: '/sbin/logread'" \
+		'export function render_interface_facts' \
+		'export function useful_command_output' \
+		'wireless status command unsupported for selected interface'
 	do
 		if ! grep -Fq -- "$declaration" "$diagnostics"; then
 			echo "missing fixed diagnostic command gate: $declaration" >&2
 			fail=1
 		fi
 	done
+
+	if grep -Fq "sprintf('%J', selected)" "$diagnostics" ||
+		grep -Fq "sprintf('%J', sysfs)" "$diagnostics" ||
+		grep -Fq '`## ${title.text}' "$diagnostics"; then
+		echo 'interface diagnostics still render raw JSON or Markdown headings' >&2
+		fail=1
+	fi
+
+	message="$root/packages/netwatch/netwatch/files/usr/share/netwatch/message.uc"
+	if ! grep -Fq "push(body, 'Diagnostics:');" "$message" ||
+		grep -Fq '`Evidence: ${evidence_json}`' "$message"; then
+		echo 'interface email does not have the clean diagnostics boundary' >&2
+		fail=1
+	fi
 
 	node -e '
 		const source = require("fs").readFileSync(process.argv[1], "utf8");

@@ -1,7 +1,9 @@
-import { equal, truthy } from 'test';
+import { deep_equal, equal, truthy } from 'test';
 import {
 	redact_diagnostic_text,
 	render_diagnostic_report,
+	render_interface_facts,
+	useful_command_output,
 	collect_diagnostics_with,
 	command_output_with,
 	start_diagnostics_with
@@ -107,6 +109,89 @@ truthy(omitted_errors.truncated, 'omitted errors set report truncation metadata'
 truthy(match(omitted_errors.text, /additional collection errors omitted/),
 	'error omission notice rendered');
 
+let ap_snapshot = {
+	configured: {
+		wifi_ifaces: [ {
+			id: 'default_radio1', device: 'radio1', mode: 'ap',
+			ssid: 'Helium+🎈', disabled: true
+		} ]
+	},
+	runtime: {
+		wireless: {
+			radio1: { up: true, pending: false, interfaces: [] }
+		}
+	},
+	sources: {
+		network_interfaces: true, wireless_aps: true,
+		wireless_runtime: true, sysfs_devices: true
+	}
+};
+let ap_result = {
+	ok: false, reason: 'administratively_disabled',
+	summary: 'wireless AP or parent radio is disabled',
+	selector: 'wifi-iface:default_radio1', kind: 'wifi-iface',
+	configured_name: 'default_radio1',
+	label: 'AP: Helium+🎈 — radio1 / default_radio1',
+	live_device: null,
+	evidence: {
+		radio: 'radio1', ssid: 'Helium+🎈', radio_up: true,
+		live_present: false
+	}
+};
+equal(render_interface_facts(ap_snapshot,
+	{ kind: 'wifi-iface', id: 'default_radio1' }, ap_result, 1786647934),
+	join('\n', [
+		'Selector: wifi-iface:default_radio1',
+		'Interface: AP: Helium+🎈 — radio1 / default_radio1',
+		'Reason: wireless AP or parent radio is disabled',
+		'Radio: radio1',
+		'SSID: Helium+🎈',
+		'Configured disabled: yes',
+		'Radio up: yes',
+		'Live AP present: no',
+		'Collected at: 1786647934'
+	]), 'Wi-Fi AP state renders as ordered readable facts');
+
+let usage_text = 'Usage: iwinfo <device> info\n' +
+	'iwinfo <device> scan\n' +
+	'iwinfo <device> txpowerlist\n' +
+	'iwinfo <device> freqlist\n';
+deep_equal(useful_command_output('iwinfo', { text: usage_text, ok: false }), {
+	text: '', useful: false,
+	reason: 'wireless status command unsupported for selected interface'
+}, 'failed iwinfo help output is replaced with one useful reason');
+deep_equal(useful_command_output('iwinfo', {
+	text: 'ESSID: "Office"\nMode: Master\nSignal: -52 dBm\n', ok: true
+}), {
+	text: 'ESSID: "Office"\nMode: Master\nSignal: -52 dBm\n',
+	useful: true, reason: null
+}, 'real wireless status remains available');
+deep_equal(useful_command_output('logread', { text: '', ok: true }), {
+	text: '', useful: false, reason: null
+}, 'empty relevant logs are omitted without an error');
+
+let clean_ap = collect_diagnostics_with(
+	{ type: 'interface', interface_selector: 'wifi-iface:default_radio1' },
+	ap_result,
+	{
+		clock: () => 1786647934,
+		snapshot: () => ap_snapshot,
+		readfile: (path, limit) => null,
+		readlink: (path) => null,
+		command: (name, command) => name == 'iwinfo'
+			? { text: usage_text, ok: false }
+			: { text: '', ok: true }
+	});
+truthy(match(clean_ap.text,
+	/wireless status command unsupported for selected interface/),
+	'unsupported wireless command gets a concise diagnostic');
+for (let unwanted in [ 'Usage:', 'iwinfo <device>', '"result"', '"sources"',
+	'network_interfaces', 'Recent relevant logs', '## ' ])
+	equal(match(clean_ap.text, regexp(unwanted)), null,
+		`${unwanted} omitted from clean interface diagnostics`);
+equal(match(clean_ap.text, /[{}]/), null,
+	'clean interface diagnostics contain no JSON wrapper braces');
+
 let multibyte_sections = [];
 let per_section_multibyte = render_diagnostic_report([
 	{ title: 'Per-section multibyte', text: repeated('€', 6000) }
@@ -175,7 +260,7 @@ let degraded_sysfs = collect_diagnostics_with(
 			? 'netifd: eth0 link failed' : 'link details'
 	});
 equal(length(required_reads), 10, 'all fixed required sysfs facts attempted');
-truthy(match(degraded_sysfs.text, /"operstate"\s*:\s*"down"/),
+truthy(match(degraded_sysfs.text, /Operstate: down/),
 	'successful sysfs fact preserved through partial read failure');
 truthy(degraded_sysfs.incomplete, 'null required sysfs reads mark report incomplete');
 truthy(match(degraded_sysfs.text, /kernel interface facts incomplete/),
