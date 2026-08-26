@@ -11,8 +11,8 @@ cp "$root/scripts/package-output.sh" "$tmp/scripts/package-output.sh"
 cp "$root/scripts/verify-source-archive.sh" \
 	"$tmp/scripts/verify-source-archive.sh"
 cp "$root/README.md" "$tmp/README.md"
-printf 'runtime apk fixture\n' > "$tmp/work/sdk/bin/packages/base/netwatch-1.1.0-r4.apk"
-printf 'luci apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-netwatch-1.1.0-r4.apk"
+printf 'runtime apk fixture\n' > "$tmp/work/sdk/bin/packages/base/netwatch-1.1.0-r5.apk"
+printf 'luci apk fixture\n' > "$tmp/work/sdk/bin/packages/base/luci-app-netwatch-1.1.0-r5.apk"
 printf 'scheduled backup apk fixture\n' > \
 	"$tmp/work/sdk/bin/packages/base/luci-app-scheduled-backup-1.0.0-r3.apk"
 printf 'obsolete runtime signed r2 feed fixture\n' > \
@@ -42,17 +42,17 @@ stale_archive=$stale_archive.gz
 
 rm "$tmp/feed/x86_64/netwatch-1.1.0-r2.apk" \
 	"$tmp/feed/x86_64/luci-app-netwatch-1.1.0-r2.apk"
-printf 'runtime signed r4 feed fixture\n' > \
-	"$tmp/feed/x86_64/netwatch-1.1.0-r4.apk"
-printf 'luci signed r4 feed fixture\n' > \
-	"$tmp/feed/x86_64/luci-app-netwatch-1.1.0-r4.apk"
+printf 'runtime signed r5 feed fixture\n' > \
+	"$tmp/feed/x86_64/netwatch-1.1.0-r5.apk"
+printf 'luci signed r5 feed fixture\n' > \
+	"$tmp/feed/x86_64/luci-app-netwatch-1.1.0-r5.apk"
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
 	add -u feed/x86_64
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
-	add feed/x86_64/netwatch-1.1.0-r4.apk \
-	feed/x86_64/luci-app-netwatch-1.1.0-r4.apk
+	add feed/x86_64/netwatch-1.1.0-r5.apk \
+	feed/x86_64/luci-app-netwatch-1.1.0-r5.apk
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
-	commit -q -m 'current r4 fixture source'
+	commit -q -m 'current r5 fixture source'
 
 printf 'must not be released\n' > "$tmp/local-only.secret"
 git --git-dir="$tmp/work/git-metadata" --work-tree="$tmp" \
@@ -69,8 +69,8 @@ if "$tmp/scripts/verify-source-archive.sh" "$stale_archive" >/dev/null 2>&1; the
 	exit 1
 fi
 for artifact in \
-	netwatch_1.1.0-r4_all.apk \
-	luci-app-netwatch_1.1.0-r4_all.apk \
+	netwatch_1.1.0-r5_all.apk \
+	luci-app-netwatch_1.1.0-r5_all.apk \
 	luci-app-scheduled-backup_1.0.0-r3_all.apk \
 	openwrt-netwatch-1.1.0-source.tar.gz \
 	SHA256SUMS
@@ -82,8 +82,8 @@ do
 done
 
 for artifact in \
-	netwatch_1.1.0-r4_all.apk \
-	luci-app-netwatch_1.1.0-r4_all.apk \
+	netwatch_1.1.0-r5_all.apk \
+	luci-app-netwatch_1.1.0-r5_all.apk \
 	luci-app-scheduled-backup_1.0.0-r3_all.apk \
 	openwrt-netwatch-1.1.0-source.tar.gz
 do
