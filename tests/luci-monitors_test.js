@@ -17,6 +17,10 @@ String.prototype.format = function(...values) {
 
 function createHarness() {
 	let currentMap = null;
+	let modalClosed = false;
+	const writes = [];
+	const removes = [];
+	const formValues = Object.create(null);
 	const monitors = {
 		Test3: {
 			type: 'interface',
@@ -26,6 +30,12 @@ function createHarness() {
 		ping: {
 			type: 'ping',
 			target: '192.168.4.108',
+			interface_selector: ''
+		},
+		tcp: {
+			type: 'tcp',
+			target: '192.168.4.108',
+			port: '80',
 			interface_selector: ''
 		},
 		missing: {
@@ -50,6 +60,41 @@ function createHarness() {
 		}
 
 		depends() {}
+
+		cfgvalue(sectionId) {
+			return uci.get('netwatch', sectionId, this.option);
+		}
+
+		formvalue(sectionId) {
+			const key = `${sectionId}.${this.option}`;
+			return Object.prototype.hasOwnProperty.call(formValues, key)
+				? formValues[key] : this.cfgvalue(sectionId);
+		}
+
+		isActive() {
+			return this.option !== '_display_target';
+		}
+
+		write(sectionId, value) {
+			writes.push([ 'netwatch', sectionId, this.option, value ]);
+			monitors[sectionId][this.option] = value;
+		}
+
+		remove(sectionId) {
+			removes.push([ 'netwatch', sectionId, this.option ]);
+		}
+
+		parse(sectionId) {
+			if (!this.isActive(sectionId))
+				return Promise.resolve(this.remove(sectionId));
+
+			const configured = this.cfgvalue(sectionId);
+			const submitted = this.formvalue(sectionId);
+			if (configured !== submitted)
+				return Promise.resolve(this.write(sectionId, submitted));
+
+			return Promise.resolve();
+		}
 	}
 
 	class Section {
@@ -81,6 +126,15 @@ function createHarness() {
 
 		render() {
 			return this;
+		}
+
+		saveModal(sectionId, values) {
+			modalClosed = false;
+			for (const [ option, value ] of Object.entries(values || {}))
+				formValues[`${sectionId}.${option}`] = value;
+
+			return Promise.all(this.sections[0].children.map(option =>
+				option.parse(sectionId))).then(() => { modalClosed = true; });
 		}
 	}
 
@@ -143,7 +197,11 @@ function createHarness() {
 					if (option.option === name)
 						return option;
 			return null;
-		}
+		},
+		saveModal(sectionId, values) { return currentMap.saveModal(sectionId, values); },
+		modalClosed() { return modalClosed; },
+		writes() { return writes.slice(); },
+		removes() { return removes.slice(); }
 	};
 }
 
@@ -161,12 +219,37 @@ function createHarness() {
 	assert.ok(display, 'grid has a display-only target column');
 	assert.equal(display.type, harness.DummyValue, 'target display uses LuCI DummyValue');
 	assert.equal(display.title, 'Target');
-	assert.equal(display.write, null, 'display-only target does not write UCI');
-	assert.equal(display.remove, null, 'display-only target does not remove UCI');
+	assert.equal(typeof(display.parse), 'function', 'display-only target has a no-op parser');
+	assert.equal(typeof(display.write), 'function', 'display-only target has a safe no-op writer');
+	assert.equal(typeof(display.remove), 'function', 'display-only target has a safe no-op remover');
 	assert.equal(display.textvalue('Test3'),
 		'AP: Helium+🎈 — radio1 / default_radio1 (disabled)');
 	assert.equal(display.textvalue('ping'), '192.168.4.108');
 	assert.equal(display.textvalue('missing'), 'Missing: wifi-iface:gone');
+
+	await assert.doesNotReject(harness.saveModal('Test3', {
+		name: 'Renamed AP monitor',
+		type: 'interface',
+		interface_selector: 'wifi-iface:default_radio1'
+	}));
+	assert.equal(harness.modalClosed(), true, 'interface monitor modal closes after save');
+	assert.deepEqual(harness.writes().filter(write => write[2] === 'name'), [
+		[ 'netwatch', 'Test3', 'name', 'Renamed AP monitor' ]
+	]);
+	assert.equal(harness.writes().some(write => write[2] === '_display_target'), false,
+		'display target never writes UCI');
+	assert.equal(harness.removes().some(remove => remove[2] === '_display_target'), false,
+		'display target never removes UCI');
+
+	await assert.doesNotReject(harness.saveModal('ping', {
+		name: 'Renamed ping monitor', type: 'ping', target: '192.168.4.108'
+	}));
+	assert.equal(harness.modalClosed(), true, 'ping monitor modal closes after save');
+
+	await assert.doesNotReject(harness.saveModal('tcp', {
+		name: 'Renamed TCP monitor', type: 'tcp', target: '192.168.4.108', port: '80'
+	}));
+	assert.equal(harness.modalClosed(), true, 'TCP monitor modal closes after save');
 })().catch(error => {
 	console.error(error && error.stack ? error.stack : error);
 	process.exitCode = 1;

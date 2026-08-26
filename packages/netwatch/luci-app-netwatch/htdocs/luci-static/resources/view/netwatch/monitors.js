@@ -169,9 +169,10 @@ return view.extend({
 		target.depends('type', 'ping');
 		target.depends('type', 'tcp');
 
-		o = s.option(form.DummyValue, '_display_target', _('Target'));
-		o.write = null;
-		o.remove = null;
+	o = s.option(form.DummyValue, '_display_target', _('Target'));
+	o.parse = function() { return Promise.resolve(); };
+	o.write = function() {};
+	o.remove = function() {};
 		o.textvalue = function(sectionId) {
 			return targetDisplayValue(
 				uci.get('netwatch', sectionId, 'type'),

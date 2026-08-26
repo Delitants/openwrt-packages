@@ -689,6 +689,13 @@ NODE
 	monitors="$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js"
 	email="$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js"
 
+	if ! grep -Fq "o.parse = function() { return Promise.resolve(); };" "$monitors" ||
+		grep -Fq 'o.write = null;' "$monitors" ||
+		grep -Fq 'o.remove = null;' "$monitors"; then
+		echo 'monitor display target does not have a safe no-op modal parser' >&2
+		fail=1
+	fi
+
 	for json in "$menu" "$acl" "$ucitrack"; do
 		node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' \
 			"$json" || fail=1
