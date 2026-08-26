@@ -11,6 +11,7 @@ const LIMITS = {
 
 const REPEAT = [0, 600, 1800, 3600];
 const TLS = ['none', 'starttls', 'tls'];
+const LOG_VERBOSITY = [ 'errors', 'normal', 'verbose' ];
 
 function has_line_break(value) {
 	return type(value) == 'string' && !!match(value, /[\r\n]/);
@@ -113,12 +114,14 @@ export function valid_interface_selector(value) {
 
 export function normalize_global(raw) {
 	raw ??= {};
+	let log_verbosity = plain_string(raw.log_verbosity, 'normal');
 
 	return {
 		enabled: uci_bool(raw.enabled, true),
 		startup_grace: default_integer(raw.startup_grace, 0, 604800, 60),
 		recipients: plain_string(raw.recipients, ''),
-		mail_retry_backoff: default_integer(raw.mail_retry_backoff, 1, 86400, 300)
+		mail_retry_backoff: default_integer(raw.mail_retry_backoff, 1, 86400, 300),
+		log_verbosity: log_verbosity in LOG_VERBOSITY ? log_verbosity : 'normal'
 	};
 };
 

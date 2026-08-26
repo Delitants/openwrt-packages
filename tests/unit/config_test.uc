@@ -29,8 +29,22 @@ deep_equal(global, {
 	enabled: false,
 	startup_grace: 60,
 	recipients: '',
-	mail_retry_backoff: 300
+	mail_retry_backoff: 300,
+	log_verbosity: 'normal'
 }, 'global defaults normalized');
+
+equal(normalize_global({}).log_verbosity, 'normal',
+	'missing verbosity defaults normal');
+equal(normalize_global({ log_verbosity: 'errors' }).log_verbosity, 'errors',
+	'errors verbosity accepted');
+equal(normalize_global({ log_verbosity: 'normal' }).log_verbosity, 'normal',
+	'normal verbosity accepted');
+equal(normalize_global({ log_verbosity: 'verbose' }).log_verbosity, 'verbose',
+	'verbose verbosity accepted');
+equal(normalize_global({ log_verbosity: 'debug' }).log_verbosity, 'normal',
+	'invalid verbosity defaults normal');
+equal(normalize_global({ log_verbosity: 'verbose\nsecret' }).log_verbosity, 'normal',
+	'verbosity line break rejected');
 
 let ordered = {};
 ordered.first = 1;

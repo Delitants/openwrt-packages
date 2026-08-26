@@ -17,7 +17,7 @@ require_file packages/netwatch/netwatch/files/etc/config/netwatch-secrets
 require_file packages/netwatch/netwatch/files/etc/init.d/netwatch
 require_file packages/netwatch/netwatch/files/usr/libexec/netwatch-upgrade
 for module in \
-	alerts config diagnostics interface_probe interfaces mail_delivery mail_failure mail_test message migrate \
+	alerts config diagnostics interface_probe interfaces logger mail_delivery mail_failure mail_test message migrate \
 	netwatchd ping probe result rpc secrets state store
 do
 	require_file "packages/netwatch/netwatch/files/usr/share/netwatch/$module.uc"
@@ -136,7 +136,7 @@ do
 done
 
 for module in \
-	alerts config diagnostics interface_probe interfaces mail_delivery mail_failure mail_test message migrate \
+	alerts config diagnostics interface_probe interfaces logger mail_delivery mail_failure mail_test message migrate \
 	netwatchd ping probe result rpc secrets state store
 do
 	if ! grep -Fq -- "usr/share/netwatch/$module.uc" \
@@ -156,8 +156,8 @@ luci_manifest_count=$(awk '
 	luci && /^[[:space:]]*'\''[^'\'']+'\''/ { count++ }
 	luci && /luci-files\.expected/ { print count; exit }
 ' "$root/scripts/verify-artifacts.sh")
-if [ "$runtime_manifest_count" != 25 ] || [ "$luci_manifest_count" != 7 ]; then
-	echo "artifact manifest counts are not exactly 25 runtime and 7 LuCI paths: $runtime_manifest_count/$luci_manifest_count" >&2
+if [ "$runtime_manifest_count" != 26 ] || [ "$luci_manifest_count" != 7 ]; then
+	echo "artifact manifest counts are not exactly 26 runtime and 7 LuCI paths: $runtime_manifest_count/$luci_manifest_count" >&2
 	fail=1
 fi
 
@@ -187,7 +187,7 @@ if [ "$fail" -eq 0 ]; then
 		'outputs/netwatch_1.1.0-r3_all.apk' \
 		'outputs/luci-app-netwatch_1.1.0-r3_all.apk' \
 		'outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
-		'25 runtime manifest paths' \
+		'26 runtime manifest paths' \
 		'exactly seven LuCI manifest paths' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/keys/netwatch-local.pem' \
 		'https://raw.githubusercontent.com/Delitants/openwrt-packages/main/feed/x86_64/packages.adb' \
@@ -688,6 +688,20 @@ NODE
 	status="$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/status.js"
 	monitors="$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/monitors.js"
 	email="$root/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js"
+	runtime_modules="$root/packages/netwatch/netwatch/files/usr/share/netwatch"
+	netwatch_config="$root/packages/netwatch/netwatch/files/etc/config/netwatch"
+
+	if grep -ERn --exclude='logger.uc' 'log[.]syslog[(]' "$runtime_modules"; then
+		echo 'daemon syslog call bypasses the global verbosity gate' >&2
+		fail=1
+	fi
+
+	if ! grep -Fq "option log_verbosity 'normal'" "$netwatch_config" ||
+		! grep -Fq "s.option(form.ListValue, 'log_verbosity'" "$email" ||
+		! grep -Fq "import { new_logger } from 'logger';" "$runtime_modules/netwatchd.uc"; then
+		echo 'global normal-default log verbosity is incomplete' >&2
+		fail=1
+	fi
 
 	if ! grep -Fq "o.parse = function() { return Promise.resolve(); };" "$monitors" ||
 		grep -Fq 'o.write = null;' "$monitors" ||
@@ -1221,7 +1235,7 @@ NODE
 		const save = source.indexOf("m.save(null, true)", firstBusy);
 		const secondBusy = source.indexOf("setTestEmailBusy(m, true);", save);
 		const apply = source.indexOf("uci.apply()", secondBusy);
-		const send = source.indexOf("callTestEmail(recipient)", apply);
+		const send = source.indexOf("requestTestEmail(recipient", apply);
 		const release = source.indexOf("testEmailInFlight = false;", send);
 		const clearBusy = source.indexOf("setTestEmailBusy(m, false);", release);
 		if (!source.includes("let testEmailInFlight = false;") ||

@@ -712,3 +712,23 @@ msgstr ""
 #: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:360
 msgid "timed out waiting for the delivery result"
 msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:240
+msgid "Errors only logs failures; Normal adds transitions and lifecycle events; Verbose also logs every probe and diagnostic step."
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:241
+msgid "Errors only"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:239
+msgid "Log verbosity"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:242
+msgid "Normal"
+msgstr ""
+
+#: /src/packages/netwatch/luci-app-netwatch/htdocs/luci-static/resources/view/netwatch/email.js:243
+msgid "Verbose"
+msgstr ""

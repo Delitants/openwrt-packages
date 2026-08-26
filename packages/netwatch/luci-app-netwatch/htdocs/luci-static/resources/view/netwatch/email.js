@@ -235,6 +235,14 @@ return view.extend({
 		o.default = '300';
 		o.rmempty = false;
 
+		o = s.option(form.ListValue, 'log_verbosity', _('Log verbosity'),
+			_('Errors only logs failures; Normal adds transitions and lifecycle events; Verbose also logs every probe and diagnostic step.'));
+		o.value('errors', _('Errors only'));
+		o.value('normal', _('Normal'));
+		o.value('verbose', _('Verbose'));
+		o.default = 'normal';
+		o.rmempty = false;
+
 		s = m.section(form.NamedSection, 'smtp', 'smtp', _('SMTP server'));
 
 		o = s.option(form.Value, 'server', _('Server'));

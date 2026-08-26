@@ -4,6 +4,7 @@ import * as ubus from 'ubus';
 import * as uci from 'uci';
 import * as uloop from 'uloop';
 import { normalize_global, normalize_smtp, normalize_monitor } from 'config';
+import { new_logger } from 'logger';
 import { new_state, apply_result } from 'state';
 import {
 	due_alert, apply_alert_delivery_outcome, record_alert_failure
@@ -48,6 +49,7 @@ let mail_error = null;
 let mail_config_ready = false;
 let password_stored = false;
 let global_config = normalize_global({});
+let logger = new_logger(log, () => global_config.log_verbosity);
 let smtp_config = normalize_smtp({});
 let monitors = [];
 let monitor_by_id = {};
@@ -64,7 +66,7 @@ let mail_test = new_mail_test_tracker();
 function persist_status() {
 	if (!write_status(daemon_started, last_reload, mail_error,
 		password_stored, mail_test, states))
-		log.syslog('err', 'unable to write public status');
+		logger.error('err', 'unable to write public status');
 };
 
 function mail_work_active() {
@@ -127,11 +129,14 @@ function configure_mail(next_smtp) {
 	catch (error) {
 		mail_config_ready = false;
 		mail_error = 'mail configuration invalid';
+		logger.error('err', 'mail configuration invalid');
 		return;
 	}
 
 	mail_config_ready = install_mail_config(contents);
 	mail_error = mail_config_ready ? null : 'mail delivery failed';
+	if (!mail_config_ready)
+		logger.error('err', 'unable to install private mail configuration');
 };
 
 function fixed_probe_failure(reason, detail) {
@@ -175,11 +180,11 @@ function record_probe_result(id, state, run_generation, result) {
 	let transition = apply_result(state, current_monitor, result, completed_at);
 	next_check[id] = completed_at + current_monitor.interval;
 
-	log.syslog(result.ok ? 'info' : 'warning',
+	logger.verbose(result.ok ? 'info' : 'warning',
 		'monitor %s probe result %s', id, result.ok ? 'healthy' : result.reason);
 
 	if (state.status != previous_status)
-		log.syslog('notice', 'monitor %s transition %s', id, transition);
+		logger.normal('notice', 'monitor %s transition %s', id, transition);
 
 	persist_status();
 
@@ -201,6 +206,7 @@ function start_monitor_check(monitor) {
 
 	if (!start_probe(monitor, (result) =>
 		record_probe_result(monitor.id, state, run_generation, result))) {
+		logger.error('err', 'monitor %s unable to start probe', monitor.id);
 		record_probe_result(monitor.id, state, run_generation,
 			fixed_probe_failure('probe_start', 'unable to start probe'));
 		return false;
@@ -277,7 +283,7 @@ function begin_shutdown() {
 		return;
 
 	shutting_down = true;
-	log.syslog('notice', 'daemon shutdown requested');
+	logger.normal('notice', 'daemon shutdown requested');
 
 	if (scheduler) {
 		scheduler.cancel();
@@ -347,6 +353,7 @@ function alert_render_failed(state, now, reason) {
 	let result = record_alert_failure(
 		state, now, global_config.mail_retry_backoff, reason);
 	mail_error = result.error;
+	logger.error('err', 'monitor %s mail preparation failed: %s', state.id, reason);
 	persist_status();
 };
 
@@ -382,9 +389,12 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 				let result = apply_alert_delivery_outcome(
 					state, kind, time(), global_config.mail_retry_backoff, outcome);
 				mail_error = result.error;
-				log.syslog(result.ok ? 'info' : 'err',
-					'monitor %s %s mail %s', monitor.id, kind,
-					result.ok ? 'delivered' : 'delivery failed');
+				if (result.ok)
+					logger.normal('info', 'monitor %s %s mail delivered',
+						monitor.id, kind);
+				else
+					logger.error('err', 'monitor %s %s mail delivery failed',
+						monitor.id, kind);
 			}
 
 			persist_status();
@@ -399,6 +409,8 @@ function start_alert_delivery(monitor, state, kind, now, recipients, diagnostic)
 		let result = record_alert_failure(
 			state, now, global_config.mail_retry_backoff, 'spawn');
 		mail_error = result.error;
+		logger.error('err', 'monitor %s %s mail process failed to start',
+			monitor.id, kind);
 		persist_status();
 		return false;
 	}
@@ -425,7 +437,7 @@ function start_alert(monitor, state, kind, now) {
 		let incident_started = state.incident_started;
 		let diagnostic_result = state.last_result;
 
-		log.syslog('info', 'monitor %s diagnostic start selector %s reason %s',
+		logger.verbose('info', 'monitor %s diagnostic start selector %s reason %s',
 			monitor.id, monitor.interface_selector,
 			state.last_result?.reason ?? 'unknown');
 
@@ -445,7 +457,7 @@ function start_alert(monitor, state, kind, now) {
 				return;
 			}
 
-			log.syslog(diagnostic.incomplete ? 'warning' : 'info',
+			logger.verbose(diagnostic.incomplete ? 'warning' : 'info',
 				'monitor %s diagnostic collection %s truncated %s', monitor.id,
 				diagnostic.incomplete ? 'incomplete' : 'complete',
 				diagnostic.truncated ? 'yes' : 'no');
@@ -532,7 +544,7 @@ function load_configuration() {
 		});
 	}
 	catch (error) {
-		log.syslog('err', 'configuration reload failed');
+		logger.error('err', 'configuration reload failed');
 		return false;
 	}
 
@@ -549,7 +561,7 @@ function load_configuration() {
 
 	configure_mail(smtp_config);
 	persist_status();
-	log.syslog('info', 'configuration reloaded');
+	logger.normal('info', 'configuration reloaded');
 
 	if (scheduler)
 		scheduler.set(0);
@@ -669,6 +681,10 @@ function request_test_email(request) {
 		time,
 		(current) => {
 			mail_error = mail_test_error(mail_error, current);
+			if (current?.state == 'sent')
+				logger.normal('info', 'test mail %d delivered', current.id);
+			else if (current?.state == 'failed')
+				logger.error('err', 'test mail %d delivery failed', current.id);
 			persist_status();
 		}
 	);

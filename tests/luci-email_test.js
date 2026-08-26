@@ -213,6 +213,7 @@ function createHarness(options = {}) {
 
 	return {
 		definition,
+		form,
 		events,
 		notifications,
 		timers,
@@ -400,6 +401,20 @@ test('TLS certificate bypass is default-off and only depends on TLS modes', () =
 	assert.deepEqual(insecure.dependencies, [
 		[ 'tls', 'starttls' ],
 		[ 'tls', 'tls' ]
+	]);
+});
+
+test('global log verbosity defaults to normal and exposes all three levels', () => {
+	const harness = createHarness();
+	const verbosity = harness.option('log_verbosity');
+	assert.ok(verbosity, 'log_verbosity option exists');
+	assert.equal(verbosity.type, harness.form.ListValue);
+	assert.equal(verbosity.default, 'normal');
+	assert.equal(verbosity.rmempty, false);
+	assert.deepEqual(verbosity.choices, [
+		[ 'errors', 'Errors only' ],
+		[ 'normal', 'Normal' ],
+		[ 'verbose', 'Verbose' ]
 	]);
 });
 

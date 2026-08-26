@@ -103,7 +103,7 @@ The source suite covers sixteen unit groups, stable package output generation,
 static/ucode checks, and artifact inspection. The artifact verifier requires
 two `1.1.0-r3` `noarch` manifests. The runtime manifest contains the CA bundle,
 `msmtp`, ucode, and all required ucode modules; the LuCI manifest contains
-`luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 25 runtime manifest paths
+`luci-base`, `rpcd-mod-luci`, and `netwatch`. Exactly 26 runtime manifest paths
 and exactly seven LuCI manifest paths must match the expected lists. The
 runtime list includes 18 modules, two UCI config files, the init script, the
 upgrade activator, and three APK metadata paths. `/etc/config/netwatch` and the root-owned

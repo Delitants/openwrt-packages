@@ -125,6 +125,7 @@ printf '%s\n' \
 	'usr/share/netwatch/diagnostics.uc' \
 	'usr/share/netwatch/interface_probe.uc' \
 	'usr/share/netwatch/interfaces.uc' \
+	'usr/share/netwatch/logger.uc' \
 	'usr/share/netwatch/mail_delivery.uc' \
 	'usr/share/netwatch/mail_failure.uc' \
 	'usr/share/netwatch/mail_test.uc' \
