@@ -618,7 +618,10 @@ export function start_diagnostics_with(monitor, result, callback, deps) {
 				try { return deps.collect(monitor, result); }
 				catch (error) { return incomplete_report('diagnostic collector failed'); }
 			},
-			(report) => finish(report)
+			(report) => finish(report),
+			// Keep the affected ucode task cleanup path enabled. The collector
+			// never requests input, but omitting this callback leaks its output pipe.
+			() => null
 		);
 	}
 	catch (error) { return false; }

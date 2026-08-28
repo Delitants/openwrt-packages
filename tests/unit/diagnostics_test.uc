@@ -461,3 +461,31 @@ truthy(timed_out.incomplete, 'timeout produces incomplete report');
 truthy(match(timed_out.text, /Diagnostic collection incomplete/), 'timeout notice rendered');
 output(worker());
 equal(callbacks, 1, 'late worker output ignored');
+
+// Match the affected OpenWrt ucode task cleanup: without an input callback a
+// completed task retains its output pipe. Repeated diagnostics must not grow
+// that descriptor count either.
+let pending_diagnostic_completions = [];
+let open_diagnostic_pipes = 0;
+let cleanup_uloop = {
+	task: (fn, cb, input) => {
+		open_diagnostic_pipes++;
+		push(pending_diagnostic_completions, () => {
+			cb(fn({}));
+			if (type(input) == 'function') open_diagnostic_pipes--;
+		});
+		return { finished: () => true, kill: () => true };
+	},
+	timer: (milliseconds, cb) => ({ cancel: () => true })
+};
+for (let i = 0; i < 16; i++)
+	truthy(start_diagnostics_with(
+		{ interface_selector: 'device:eth0' }, { reason: 'carrier_lost' },
+		() => {},
+		{ uloop: cleanup_uloop, collect: () => ({
+			text: 'diagnostic report', incomplete: false, errors: [], truncated: false
+		}) }
+	), `cleanup diagnostic ${i + 1} starts`);
+for (let complete in pending_diagnostic_completions) complete();
+equal(open_diagnostic_pipes, 0,
+	'completed diagnostic tasks do not accumulate ucode task pipes');

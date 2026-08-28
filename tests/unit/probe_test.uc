@@ -226,3 +226,32 @@ assert_interface_unavailable(callback_result, 'interface probe timed out',
 task_result = task_function({});
 output_callback(task_result);
 equal(callback_count, 1, 'late interface worker result after timeout is ignored');
+
+// OpenWrt 25.12.5 ucode 85922056 only closes a completed task's output pipe
+// when an input callback was supplied. Model that lifecycle at our boundary so
+// repeated monitor checks catch the production descriptor exhaustion.
+let pending_probe_completions = [];
+let open_probe_pipes = 0;
+let cleanup_uloop = {
+	task: (worker, output, input) => {
+		open_probe_pipes++;
+		push(pending_probe_completions, () => {
+			output(worker({}));
+			if (type(input) == 'function') open_probe_pipes--;
+		});
+		return { finished: () => true, kill: () => true };
+	},
+	timer: (milliseconds, callback) => ({ cancel: () => true })
+};
+let cleanup_dependencies = {
+	fs: fake_fs,
+	socket: fake_socket,
+	uloop: cleanup_uloop,
+	interface: () => ({ ok: true, reason: null })
+};
+for (let i = 0; i < 64; i++)
+	equal(start_probe_with(ping_monitor, () => {}, cleanup_dependencies), true,
+		`cleanup probe ${i + 1} starts`);
+for (let complete in pending_probe_completions) complete();
+equal(open_probe_pipes, 0,
+	'completed monitor probes do not accumulate ucode task pipes');

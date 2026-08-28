@@ -171,7 +171,11 @@ export function start_probe_with(monitor, callback, dependencies) {
 					'probe failed');
 			}
 		},
-		(result) => finish(result)
+		(result) => finish(result),
+		// ucode 85922056 only closes a task's output pipe when an input
+		// callback is present. The worker never requests input; supplying this
+		// inert callback prevents one descriptor leaking after every probe.
+		() => null
 	);
 
 	if (!task_handle)

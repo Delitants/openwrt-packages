@@ -95,7 +95,7 @@ for makefile in \
 	packages/netwatch/netwatch/Makefile \
 	packages/netwatch/luci-app-netwatch/Makefile
 do
-	for declaration in 'PKG_VERSION:=1.1.0' 'PKG_RELEASE:=5'; do
+	for declaration in 'PKG_VERSION:=1.1.0' 'PKG_RELEASE:=6'; do
 		if ! grep -Fq -- "$declaration" "$root/$makefile"; then
 			echo "missing package version declaration in $makefile: $declaration" >&2
 			fail=1
@@ -123,10 +123,10 @@ do
 done
 
 for expectation in \
-	'runtime=outputs/netwatch_1.1.0-r5_all.apk' \
-	'luci=outputs/luci-app-netwatch_1.1.0-r5_all.apk' \
+	'runtime=outputs/netwatch_1.1.0-r6_all.apk' \
+	'luci=outputs/luci-app-netwatch_1.1.0-r6_all.apk' \
 	'source_archive=outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
-	'.info.version == "1.1.0-r5"' \
+	'.info.version == "1.1.0-r6"' \
 	'openwrt-netwatch-1.1.0/README.md'
 do
 	if ! grep -Fq -- "$expectation" "$root/scripts/verify-artifacts.sh"; then
@@ -184,8 +184,8 @@ if [ "$fail" -eq 0 ]; then
 	for text in \
 		'OpenWrt 25.12.5' \
 		'x86/64' \
-		'outputs/netwatch_1.1.0-r5_all.apk' \
-		'outputs/luci-app-netwatch_1.1.0-r5_all.apk' \
+		'outputs/netwatch_1.1.0-r6_all.apk' \
+		'outputs/luci-app-netwatch_1.1.0-r6_all.apk' \
 		'outputs/openwrt-netwatch-1.1.0-source.tar.gz' \
 		'26 runtime manifest paths' \
 		'exactly seven LuCI manifest paths' \
@@ -241,14 +241,14 @@ const verification = section('Build verification', 'Install');
 const configure = section('Configure', 'Package feed maintenance');
 const errors = [];
 
-if (!build.includes('The 1.1.0-r5 release artifacts use the stable output names above.') ||
-	!build.includes('The signed repository feed for this release contains `netwatch-1.1.0-r5` and `luci-app-netwatch-1.1.0-r5`.') ||
+if (!build.includes('The 1.1.0-r6 release artifacts use the stable output names above.') ||
+	!build.includes('The signed repository feed for this release contains `netwatch-1.1.0-r6` and `luci-app-netwatch-1.1.0-r6`.') ||
 	!build.includes('This source document does not attest to public-byte equality or live-router verification.'))
-	errors.push('README must describe the signed local r5 release without temporal publication claims');
+	errors.push('README must describe the signed local r6 release without temporal publication claims');
 
-if (build.includes('The source tree is prepared for the 1.1.0-r5 release outputs.') ||
+if (build.includes('The source tree is prepared for the 1.1.0-r6 release outputs.') ||
 	build.includes('After a later build, signing, and feed publication'))
-	errors.push('README must not retain pre-publication future-tense r5 wording');
+	errors.push('README must not retain pre-publication future-tense r6 wording');
 
 if (!verification.startsWith('## Build verification Release artifacts must be built with the pinned OpenWrt 25.12.5 x86/64 SDK and verified with its apk-tools 3.0.5.'))
 	errors.push('README build verification must require pinned-SDK build and artifact verification');
